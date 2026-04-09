@@ -220,8 +220,20 @@ export async function uploadMedia(
   const contentType =
     imageResponse.headers.get("content-type") || "image/jpeg";
   const buffer = await imageResponse.arrayBuffer();
-  const filename =
-    imageUrl.split("/").pop()?.split("?")[0] || "upload.jpg";
+
+  // Extract filename and ensure it has a proper extension
+  let filename = imageUrl.split("/").pop()?.split("?")[0] || "upload";
+  const extMap: Record<string, string> = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+    "image/svg+xml": ".svg",
+  };
+  const hasExt = /\.\w{2,4}$/.test(filename);
+  if (!hasExt) {
+    filename += extMap[contentType] || ".jpg";
+  }
 
   const credentials = Buffer.from(
     `${site.username}:${site.appPassword}`
