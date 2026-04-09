@@ -4,7 +4,15 @@
       "WebFetch(domain:ai.google.dev)",
       "WebFetch(domain:www.npmjs.com)",
       "WebFetch(domain:developer.wordpress.org)",
-      "Bash(pnpm create:*)"
+      "Bash(pnpm create:*)",
+      "Bash(pnpm add:*)",
+      "Bash(curl -s -u \"admin1:VjB9 vuYU RlDM iTm4 87Tm p9qR\" \"https://bilginajans.com/wp-json/wp/v2/pages/1447?context=edit\")",
+      "Bash(curl -s -u \"admin1:VjB9 vuYU RlDM iTm4 87Tm p9qR\" \"https://bilginajans.com/wp-json/wp/v2/elementor_library?per_page=50&context=edit\")",
+      "Bash(curl -s -u \"admin1:VjB9 vuYU RlDM iTm4 87Tm p9qR\" \"https://bilginajans.com/wp-json/wp/v2/pages/1627?context=edit\")",
+      "Bash(npx tsc:*)",
+      "Bash(time curl:*)",
+      "Bash(grep:*)",
+      "Bash(curl -s -u \"admin1:VjB9 vuYU RlDM iTm4 87Tm p9qR\" \"https://bilginajans.com/wp-json/wp/v2/pages?per_page=100&_fields=id\")"
     ]
   }
 }
