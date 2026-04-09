@@ -1,0 +1,7 @@
+node_modules
+.next
+.git
+.env*
+.settings.json
+.prompts.json
+.DS_Store
