@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ContentPlan } from "@/lib/types";
 import { tr } from "@/lib/tr";
 import { Check } from "lucide-react";
+import useSWR from "swr";
 import { ElementorEditor } from "./elementor-editor";
 
 export function BlogWriterStep3({
@@ -22,6 +23,8 @@ export function BlogWriterStep3({
   onBack: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<string>(plans[0]?.ideaId || "");
+  const { data: siteData } = useSWR("/api/site", (url: string) => fetch(url).then(r => r.json()), { revalidateOnFocus: false, dedupingInterval: 300000 });
+  const wpUrl = siteData?.wpUrl || "";
 
   const activePlan = plans.find((p) => p.ideaId === activeTab);
   const activePageId = activeTab ? createdPages[activeTab] : undefined;
@@ -105,7 +108,7 @@ export function BlogWriterStep3({
                 </div>
                 <div className="flex gap-2">
                   <a
-                    href={`${process.env.NEXT_PUBLIC_WP_URL || ""}/wp-admin/post.php?post=${activePageId}&action=elementor`}
+                    href={`${wpUrl}/wp-admin/post.php?post=${activePageId}&action=elementor`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="rounded-md border border-purple-300 bg-purple-50 px-3 py-1 text-xs font-medium text-purple-700 hover:bg-purple-100 dark:border-purple-600 dark:bg-purple-900/20 dark:text-purple-400"

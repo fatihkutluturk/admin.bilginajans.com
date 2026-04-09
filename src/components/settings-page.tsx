@@ -71,6 +71,7 @@ export function SettingsPage() {
   const [config, setConfig] = useState<PromptConfig | null>(null);
   const [defaults, setDefaults] = useState<PromptConfig | null>(null);
   const [apiKeys, setApiKeys] = useState<{ geminiApiKey: string; unsplashAccessKey: string }>({ geminiApiKey: "", unsplashAccessKey: "" });
+  const [wordpress, setWordpress] = useState<{ url: string; username: string; appPassword: string }>({ url: "", username: "", appPassword: "" });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState("");
@@ -84,6 +85,7 @@ export function SettingsPage() {
         setConfig(data.config);
         setDefaults(data.defaults);
         if (data.apiKeys) setApiKeys(data.apiKeys);
+        if (data.wordpress) setWordpress(data.wordpress);
         setLoading(false);
       })
       .catch((err) => {
@@ -101,7 +103,7 @@ export function SettingsPage() {
       const res = await fetch("/api/settings/prompts", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ config, apiKeys }),
+        body: JSON.stringify({ config, apiKeys, wordpress }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setSuccess(tr.settings.saved);
@@ -111,7 +113,7 @@ export function SettingsPage() {
     } finally {
       setSaving(false);
     }
-  }, [config, apiKeys]);
+  }, [config, apiKeys, wordpress]);
 
   const handleReset = useCallback(
     (sectionId: keyof PromptConfig) => {
@@ -183,6 +185,50 @@ export function SettingsPage() {
 
       {/* Settings content */}
       <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+        {/* WordPress Connection */}
+        <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <h3 className="mb-4 text-sm font-semibold text-gray-900 dark:text-white">
+            WordPress Bağlantısı
+          </h3>
+          <div className="space-y-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Site URL</label>
+              <input
+                type="url"
+                value={wordpress.url}
+                onChange={(e) => setWordpress((prev) => ({ ...prev, url: e.target.value }))}
+                placeholder="https://example.com"
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Kullanıcı Adı</label>
+                <input
+                  type="text"
+                  value={wordpress.username}
+                  onChange={(e) => setWordpress((prev) => ({ ...prev, username: e.target.value }))}
+                  placeholder="admin"
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Uygulama Şifresi</label>
+                <input
+                  type="password"
+                  value={wordpress.appPassword}
+                  onChange={(e) => setWordpress((prev) => ({ ...prev, appPassword: e.target.value }))}
+                  placeholder="xxxx xxxx xxxx xxxx"
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-gray-400">
+              WordPress Yönetim Paneli → Kullanıcılar → Profiliniz → Uygulama Şifreleri bölümünden oluşturabilirsiniz
+            </p>
+          </div>
+        </div>
+
         {/* API Keys */}
         <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
           <h3 className="mb-4 text-sm font-semibold text-gray-900 dark:text-white">

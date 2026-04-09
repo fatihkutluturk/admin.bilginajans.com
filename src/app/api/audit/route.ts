@@ -2,16 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { PageAudit, AuditIssue } from "@/lib/types";
 import { auditPage } from "@/lib/audit";
 import { tr } from "@/lib/tr";
+import { getWordPressConfig } from "@/lib/prompts";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    const deep = body.deep === true; // deep scan includes Elementor data
+    const deep = body.deep === true;
 
-    const base = process.env.WP_URL!.replace(/\/$/, "");
-    const credentials = Buffer.from(
-      `${process.env.WP_USERNAME!}:${process.env.WP_APP_PASSWORD!}`
-    ).toString("base64");
+    const wp = getWordPressConfig();
+    const base = wp.url.replace(/\/$/, "");
+    const credentials = Buffer.from(`${wp.username}:${wp.appPassword}`).toString("base64");
     const headers = { Authorization: `Basic ${credentials}`, "Content-Type": "application/json" };
 
     // Fast fetch: basic fields + yoast (no Elementor data)

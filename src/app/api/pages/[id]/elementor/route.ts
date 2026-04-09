@@ -1,31 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getPageWithMeta } from "@/lib/wordpress";
+import { getPageWithMeta, wpFetchDirect } from "@/lib/wordpress";
 import { extractTextWidgets, extractImageWidgets, applyTextUpdates, applyImageAltUpdates, applyImageUrlUpdates, renderContentFromElementor } from "@/lib/elementor";
 import { ElementorElement } from "@/lib/types";
-
-async function wpFetchDirect(endpoint: string, options?: RequestInit) {
-  const base = process.env.WP_URL!.replace(/\/$/, "");
-  const url = `${base}/wp-json${endpoint}`;
-  const credentials = Buffer.from(
-    `${process.env.WP_USERNAME!}:${process.env.WP_APP_PASSWORD!}`
-  ).toString("base64");
-
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      Authorization: `Basic ${credentials}`,
-      "Content-Type": "application/json",
-      ...options?.headers,
-    },
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`WP API error (${response.status}): ${error}`);
-  }
-
-  return response.json();
-}
 
 export async function GET(
   _req: NextRequest,

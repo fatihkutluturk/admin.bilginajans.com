@@ -21,10 +21,12 @@ export function ContentEditor({
   type,
   id,
   onBack,
+  wpUrl = "",
 }: {
   type: "pages" | "posts";
   id: number;
   onBack: () => void;
+  wpUrl?: string;
 }) {
   const [item, setItem] = useState<WPContent | null>(null);
   const [loading, setLoading] = useState(true);
@@ -104,8 +106,8 @@ export function ContentEditor({
     );
   }
 
-  const wpEditUrl = `${process.env.NEXT_PUBLIC_WP_URL || ""}/wp-admin/post.php?post=${id}&action=edit`;
-  const elementorUrl = `${process.env.NEXT_PUBLIC_WP_URL || ""}/wp-admin/post.php?post=${id}&action=elementor`;
+  const wpEditUrl = `${wpUrl}/wp-admin/post.php?post=${id}&action=edit`;
+  const elementorUrl = `${wpUrl}/wp-admin/post.php?post=${id}&action=elementor`;
 
   return (
     <div className="flex h-full">

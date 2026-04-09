@@ -1,12 +1,14 @@
 import "server-only";
 import { SiteConfig } from "./types";
 import { getCached, setCache, invalidateCache } from "./cache";
+import { getWordPressConfig } from "./prompts";
 
 function getDefaultSite(): SiteConfig {
+  const wp = getWordPressConfig();
   return {
-    url: process.env.WP_URL!,
-    username: process.env.WP_USERNAME!,
-    appPassword: process.env.WP_APP_PASSWORD!,
+    url: wp.url,
+    username: wp.username,
+    appPassword: wp.appPassword,
   };
 }
 
@@ -61,6 +63,35 @@ async function wpFetch(
   }
 
   return data;
+}
+
+/**
+ * Direct WP fetch without caching — for use in API routes that need
+ * to bypass the cached wpFetch (e.g., writing operations with custom body).
+ */
+export async function wpFetchDirect(endpoint: string, options?: RequestInit) {
+  const site = getDefaultSite();
+  const base = site.url.replace(/\/$/, "");
+  const url = `${base}/wp-json${endpoint}`;
+  const credentials = Buffer.from(
+    `${site.username}:${site.appPassword}`
+  ).toString("base64");
+
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      Authorization: `Basic ${credentials}`,
+      "Content-Type": "application/json",
+      ...options?.headers,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`WP API error (${response.status}): ${error}`);
+  }
+
+  return response.json();
 }
 
 // ---- Posts ----

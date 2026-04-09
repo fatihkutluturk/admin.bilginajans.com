@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTemplateWithMeta, createPage, updateElementorData } from "@/lib/wordpress";
+import { getTemplateWithMeta, createPage, updateElementorData, wpFetchDirect } from "@/lib/wordpress";
 
 export async function POST(req: NextRequest) {
   try {
@@ -36,17 +36,8 @@ export async function POST(req: NextRequest) {
     await updateElementorData(newPage.id, typeof rawData === "string" ? rawData : JSON.stringify(rawData));
 
     // 4. Set Elementor edit mode so it renders from the data
-    const base = process.env.WP_URL!.replace(/\/$/, "");
-    const credentials = Buffer.from(
-      `${process.env.WP_USERNAME!}:${process.env.WP_APP_PASSWORD!}`
-    ).toString("base64");
-
-    await fetch(`${base}/wp-json/wp/v2/pages/${newPage.id}`, {
+    await wpFetchDirect(`/wp/v2/pages/${newPage.id}`, {
       method: "POST",
-      headers: {
-        Authorization: `Basic ${credentials}`,
-        "Content-Type": "application/json",
-      },
       body: JSON.stringify({
         meta: {
           _elementor_edit_mode: "builder",

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTemplateWithMeta } from "@/lib/wordpress";
+import { getTemplateWithMeta, wpFetchDirect } from "@/lib/wordpress";
 import { extractTextWidgets, extractImageWidgets, applyTextUpdates, applyImageAltUpdates, renderContentFromElementor } from "@/lib/elementor";
 import { ElementorElement } from "@/lib/types";
 
@@ -68,17 +68,8 @@ export async function PUT(
     const renderedContent = renderContentFromElementor(updated);
 
     // Save Elementor data + rendered content for templates
-    const base = process.env.WP_URL!.replace(/\/$/, "");
-    const credentials = Buffer.from(
-      `${process.env.WP_USERNAME!}:${process.env.WP_APP_PASSWORD!}`
-    ).toString("base64");
-
-    const res = await fetch(`${base}/wp-json/wp/v2/elementor_library/${templateId}`, {
+    await wpFetchDirect(`/wp/v2/elementor_library/${templateId}`, {
       method: "POST",
-      headers: {
-        Authorization: `Basic ${credentials}`,
-        "Content-Type": "application/json",
-      },
       body: JSON.stringify({
         content: renderedContent,
         meta: {
@@ -87,11 +78,6 @@ export async function PUT(
         },
       }),
     });
-
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`WP API error (${res.status}): ${err}`);
-    }
 
     return NextResponse.json({
       success: true,

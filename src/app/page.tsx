@@ -22,6 +22,7 @@ export default function Home() {
     dedupingInterval: 300000,
   });
   const siteName = siteData?.name;
+  const wpUrl = siteData?.wpUrl || "";
 
   const handleEdit = (id: number) => {
     setEditingId(id);
@@ -53,7 +54,7 @@ export default function Home() {
 
     // pages or posts
     if (editingId) {
-      return <ContentEditor type={view} id={editingId} onBack={handleBack} />;
+      return <ContentEditor type={view} id={editingId} onBack={handleBack} wpUrl={wpUrl} />;
     }
     return <ContentList type={view} onEdit={handleEdit} />;
   };

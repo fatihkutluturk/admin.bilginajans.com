@@ -11,6 +11,11 @@ export type AppSettings = {
     geminiApiKey?: string;
     unsplashAccessKey?: string;
   };
+  wordpress?: {
+    url?: string;
+    username?: string;
+    appPassword?: string;
+  };
 };
 
 function loadSettings(): AppSettings {
@@ -42,6 +47,20 @@ export function getGeminiApiKey(): string {
 export function getUnsplashKey(): string {
   const settings = loadSettings();
   return settings.apiKeys?.unsplashAccessKey || process.env.UNSPLASH_ACCESS_KEY || "";
+}
+
+export function getWordPressConfig(): { url: string; username: string; appPassword: string } {
+  const settings = loadSettings();
+  return {
+    url: settings.wordpress?.url || process.env.WP_URL || "",
+    username: settings.wordpress?.username || process.env.WP_USERNAME || "",
+    appPassword: settings.wordpress?.appPassword || process.env.WP_APP_PASSWORD || "",
+  };
+}
+
+export function getPublicWpUrl(): string {
+  const settings = loadSettings();
+  return settings.wordpress?.url || process.env.NEXT_PUBLIC_WP_URL || process.env.WP_URL || "";
 }
 
 export function getPromptConfig(): PromptConfig {

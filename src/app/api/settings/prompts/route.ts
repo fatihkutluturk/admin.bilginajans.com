@@ -13,6 +13,11 @@ export async function GET() {
         geminiApiKey: settings.apiKeys?.geminiApiKey || process.env.GEMINI_API_KEY || "",
         unsplashAccessKey: settings.apiKeys?.unsplashAccessKey || process.env.UNSPLASH_ACCESS_KEY || "",
       },
+      wordpress: {
+        url: settings.wordpress?.url || process.env.WP_URL || "",
+        username: settings.wordpress?.username || process.env.WP_USERNAME || "",
+        appPassword: settings.wordpress?.appPassword || process.env.WP_APP_PASSWORD || "",
+      },
     });
   } catch (error) {
     return NextResponse.json(
@@ -24,12 +29,13 @@ export async function GET() {
 
 export async function PUT(req: NextRequest) {
   try {
-    const { config, apiKeys } = await req.json();
+    const { config, apiKeys, wordpress } = await req.json();
     const existing = getSettings();
     saveSettings({
       ...existing,
       prompts: config || existing.prompts,
       apiKeys: apiKeys || existing.apiKeys,
+      wordpress: wordpress || existing.wordpress,
     });
     return NextResponse.json({ success: true });
   } catch (error) {
