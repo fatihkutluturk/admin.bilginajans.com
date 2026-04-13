@@ -72,6 +72,7 @@ export function SettingsPage() {
   const [defaults, setDefaults] = useState<PromptConfig | null>(null);
   const [apiKeys, setApiKeys] = useState<{ geminiApiKey: string; unsplashAccessKey: string }>({ geminiApiKey: "", unsplashAccessKey: "" });
   const [wordpress, setWordpress] = useState<{ url: string; username: string; appPassword: string }>({ url: "", username: "", appPassword: "" });
+  const [serpbear, setSerpbear] = useState<{ url: string; apiKey: string; username: string; password: string }>({ url: "", apiKey: "", username: "", password: "" });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState("");
@@ -86,6 +87,7 @@ export function SettingsPage() {
         setDefaults(data.defaults);
         if (data.apiKeys) setApiKeys(data.apiKeys);
         if (data.wordpress) setWordpress(data.wordpress);
+        if (data.serpbear) setSerpbear(data.serpbear);
         setLoading(false);
       })
       .catch((err) => {
@@ -103,7 +105,7 @@ export function SettingsPage() {
       const res = await fetch("/api/settings/prompts", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ config, apiKeys, wordpress }),
+        body: JSON.stringify({ config, apiKeys, wordpress, serpbear }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setSuccess(tr.settings.saved);
@@ -113,7 +115,7 @@ export function SettingsPage() {
     } finally {
       setSaving(false);
     }
-  }, [config, apiKeys, wordpress]);
+  }, [config, apiKeys, wordpress, serpbear]);
 
   const handleReset = useCallback(
     (sectionId: keyof PromptConfig) => {
@@ -188,11 +190,11 @@ export function SettingsPage() {
         {/* WordPress Connection */}
         <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
           <h3 className="mb-4 text-sm font-semibold text-gray-900 dark:text-white">
-            WordPress Bağlantısı
+            {tr.settings.wpConnection}
           </h3>
           <div className="space-y-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Site URL</label>
+              <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{tr.settings.siteUrl}</label>
               <input
                 type="url"
                 value={wordpress.url}
@@ -203,7 +205,7 @@ export function SettingsPage() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Kullanıcı Adı</label>
+                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{tr.settings.username}</label>
                 <input
                   type="text"
                   value={wordpress.username}
@@ -213,7 +215,7 @@ export function SettingsPage() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Uygulama Şifresi</label>
+                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{tr.settings.appPassword}</label>
                 <input
                   type="password"
                   value={wordpress.appPassword}
@@ -223,21 +225,19 @@ export function SettingsPage() {
                 />
               </div>
             </div>
-            <p className="text-xs text-gray-400">
-              WordPress Yönetim Paneli → Kullanıcılar → Profiliniz → Uygulama Şifreleri bölümünden oluşturabilirsiniz
-            </p>
+            <p className="text-xs text-gray-400">{tr.settings.wpHelp}</p>
           </div>
         </div>
 
         {/* API Keys */}
         <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
           <h3 className="mb-4 text-sm font-semibold text-gray-900 dark:text-white">
-            API Anahtarları
+            {tr.settings.apiKeysSection}
           </h3>
           <div className="space-y-3">
             <div>
               <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
-                Gemini API Anahtarı
+                {tr.settings.geminiKey}
               </label>
               <input
                 type="password"
@@ -247,24 +247,84 @@ export function SettingsPage() {
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
               />
               <p className="mt-1 text-xs text-gray-400">
-                <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:underline">Google AI Studio</a> &apos;dan ücretsiz alabilirsiniz
+                <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:underline">Google AI Studio</a>&#39;dan {tr.settings.geminiHelp.split("ücretsiz")[0]}ücretsiz alabilirsiniz
               </p>
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
-                Unsplash API Anahtarı
+                {tr.settings.unsplashKey}
               </label>
               <input
                 type="password"
                 value={apiKeys.unsplashAccessKey}
                 onChange={(e) => setApiKeys((prev) => ({ ...prev, unsplashAccessKey: e.target.value }))}
-                placeholder="İsteğe bağlı — stok fotoğraf araması için"
+                placeholder={`${tr.settings.optional} — stok fotoğraf araması için`}
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
               />
               <p className="mt-1 text-xs text-gray-400">
-                <a href="https://unsplash.com/developers" target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:underline">Unsplash Developers</a> &apos;dan ücretsiz alabilirsiniz
+                <a href="https://unsplash.com/developers" target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:underline">Unsplash Developers</a>&#39;dan {tr.settings.unsplashHelp.split("ücretsiz")[0]}ücretsiz alabilirsiniz
               </p>
             </div>
+          </div>
+        </div>
+
+        {/* SerpBear */}
+        <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <h3 className="mb-4 text-sm font-semibold text-gray-900 dark:text-white">
+            {tr.settings.serpbearSection}
+          </h3>
+          <div className="space-y-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                {tr.settings.serpbearUrl}
+              </label>
+              <input
+                type="url"
+                value={serpbear.url}
+                onChange={(e) => setSerpbear((prev) => ({ ...prev, url: e.target.value }))}
+                placeholder="https://seo.alanadi.com"
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                {tr.settings.serpbearApiKey}
+              </label>
+              <input
+                type="password"
+                value={serpbear.apiKey}
+                onChange={(e) => setSerpbear((prev) => ({ ...prev, apiKey: e.target.value }))}
+                placeholder="SerpBear APIKEY değeri"
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                  {tr.settings.serpbearUsername}
+                </label>
+                <input
+                  type="text"
+                  value={serpbear.username}
+                  onChange={(e) => setSerpbear((prev) => ({ ...prev, username: e.target.value }))}
+                  placeholder="admin"
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                  {tr.settings.serpbearPassword}
+                </label>
+                <input
+                  type="password"
+                  value={serpbear.password}
+                  onChange={(e) => setSerpbear((prev) => ({ ...prev, password: e.target.value }))}
+                  placeholder="SerpBear giriş şifresi"
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-gray-400">{tr.settings.serpbearHelp}</p>
           </div>
         </div>
 

@@ -2,6 +2,7 @@
 
 import { tr } from "@/lib/tr";
 import { useState } from "react";
+import { usePersistedState } from "@/lib/use-persisted-state";
 import { CloneDialog } from "./clone-dialog";
 import useSWR from "swr";
 
@@ -23,7 +24,7 @@ export function ContentList({
   type: "pages" | "posts";
   onEdit: (id: number) => void;
 }) {
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = usePersistedState(`cl:${type}:search`, "");
   const [cloning, setCloning] = useState<WPItem | null>(null);
 
   const params = new URLSearchParams({ per_page: "50" });

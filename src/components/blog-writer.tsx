@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
+import { usePersistedState } from "@/lib/use-persisted-state";
 import { ContentIdea, ContentPlan } from "@/lib/types";
 import { tr } from "@/lib/tr";
 import { Check } from "lucide-react";
@@ -20,10 +21,10 @@ type TemplateInfo = {
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 export function BlogWriter() {
-  const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [ideas, setIdeas] = useState<ContentIdea[]>([]);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [plans, setPlans] = useState<ContentPlan[]>([]);
+  const [step, setStep] = usePersistedState<1 | 2 | 3>("bw:step", 1);
+  const [ideas, setIdeas] = usePersistedState<ContentIdea[]>("bw:ideas", []);
+  const [selectedIds, setSelectedIds] = usePersistedState<Set<string>>("bw:selected", new Set());
+  const [plans, setPlans] = usePersistedState<ContentPlan[]>("bw:plans", []);
   const [createdPages, setCreatedPages] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");

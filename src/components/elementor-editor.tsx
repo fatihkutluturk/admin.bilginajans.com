@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { ExtractedWidget, ExtractedImage } from "@/lib/types";
-import { Image as ImageIcon, AlertTriangle, Search } from "lucide-react";
+import { Image as ImageIcon, AlertTriangle, Search, Wand2 } from "lucide-react";
 import { tr } from "@/lib/tr";
 import useSWR from "swr";
 import { StockPhotoPicker } from "./stock-photo-picker";
@@ -31,6 +31,8 @@ export function ElementorEditor({
   const [editedImageUrls, setEditedImageUrls] = useState<Record<string, { url: string; id: number }>>({});
   const [generatingAlts, setGeneratingAlts] = useState(false);
   const [stockPickerForWidget, setStockPickerForWidget] = useState<string | null>(null);
+  const [autoFindingImages, setAutoFindingImages] = useState<Set<string>>(new Set());
+  const [autoFindingAll, setAutoFindingAll] = useState(false);
 
   const swrFetcher = (url: string) => fetch(url).then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); });
   const { data: swrData, isLoading: loading } = useSWR(
@@ -301,6 +303,75 @@ export function ElementorEditor({
     );
   }
 
+  // Auto-find image for a single widget
+  const handleAutoFindOne = async (img: ExtractedImage) => {
+    if (!brief && !pageTitle) {
+      setError(tr.elementorEditor.briefRequired);
+      return;
+    }
+    setAutoFindingImages((prev) => new Set(prev).add(img.widgetId));
+    setError("");
+    try {
+      const res = await fetch("/api/media/auto-find", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pageBrief: brief || pageTitle,
+          images: [{ widgetId: img.widgetId, sectionIndex: img.sectionIndex, currentAlt: img.altText }],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      const result = data.results?.[0];
+      if (!result || result.error) throw new Error(result?.error || "Görsel bulunamadı");
+      setEditedImageUrls((prev) => ({ ...prev, [img.widgetId]: { url: result.wpUrl, id: result.wpMediaId } }));
+      setEditedAlts((prev) => ({ ...prev, [img.widgetId]: result.alt || prev[img.widgetId] || "" }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Otomatik görsel bulunamadı");
+    } finally {
+      setAutoFindingImages((prev) => { const n = new Set(prev); n.delete(img.widgetId); return n; });
+    }
+  };
+
+  // Auto-find images for ALL placeholder images
+  const handleAutoFindAll = async () => {
+    const placeholders = images.filter((img) => img.isPlaceholder && !editedImageUrls[img.widgetId]);
+    const targets = placeholders.length > 0 ? placeholders : images.filter((img) => !editedImageUrls[img.widgetId]);
+    if (targets.length === 0) return;
+    if (!brief && !pageTitle) {
+      setError(tr.elementorEditor.briefRequired);
+      return;
+    }
+    setAutoFindingAll(true);
+    setError("");
+    try {
+      const res = await fetch("/api/media/auto-find", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pageBrief: brief || pageTitle,
+          images: targets.map((img) => ({ widgetId: img.widgetId, sectionIndex: img.sectionIndex, currentAlt: img.altText })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      let count = 0;
+      for (const result of data.results || []) {
+        if (result.wpMediaId && result.wpUrl) {
+          setEditedImageUrls((prev) => ({ ...prev, [result.widgetId]: { url: result.wpUrl, id: result.wpMediaId } }));
+          setEditedAlts((prev) => ({ ...prev, [result.widgetId]: result.alt || prev[result.widgetId] || "" }));
+          count++;
+        }
+      }
+      setSuccess(`${count} görsel otomatik olarak bulundu ve yüklendi.`);
+      setTimeout(() => setSuccess(""), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Otomatik görsel bulunamadı");
+    } finally {
+      setAutoFindingAll(false);
+    }
+  };
+
   // Group by section
   const sections = new Map<number, ExtractedWidget[]>();
   for (const w of widgets) {
@@ -455,13 +526,23 @@ export function ElementorEditor({
                 <ImageIcon className="h-4 w-4" />
                 {tr.elementorEditor.images} ({tr.elementorEditor.imageCount(images.length)})
               </h4>
-              <button
-                onClick={handleGenerateAlts}
-                disabled={generatingAlts}
-                className="rounded-md bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-200 disabled:opacity-50 dark:bg-emerald-900/30 dark:text-emerald-400"
-              >
-                {generatingAlts ? tr.common.generating : tr.elementorEditor.generateAllAlts}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleAutoFindAll}
+                  disabled={autoFindingAll}
+                  className="flex items-center gap-1.5 rounded-md bg-indigo-100 px-3 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-200 disabled:opacity-50 dark:bg-indigo-900/30 dark:text-indigo-400"
+                >
+                  <Wand2 className="h-3 w-3" />
+                  {autoFindingAll ? "Görseller aranıyor..." : "Tüm Görselleri Bul"}
+                </button>
+                <button
+                  onClick={handleGenerateAlts}
+                  disabled={generatingAlts}
+                  className="rounded-md bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-200 disabled:opacity-50 dark:bg-emerald-900/30 dark:text-emerald-400"
+                >
+                  {generatingAlts ? tr.common.generating : tr.elementorEditor.generateAllAlts}
+                </button>
+              </div>
             </div>
             <div className="space-y-3">
               {images.map((img) => {
@@ -525,6 +606,14 @@ export function ElementorEditor({
                           placeholder={tr.elementorEditor.altText}
                           className="flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-sm outline-none focus:border-indigo-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
                         />
+                        <button
+                          onClick={() => handleAutoFindOne(img)}
+                          disabled={autoFindingImages.has(img.widgetId)}
+                          className="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 dark:border-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-400"
+                        >
+                          <Wand2 className={`h-3 w-3 ${autoFindingImages.has(img.widgetId) ? "animate-spin" : ""}`} />
+                          {autoFindingImages.has(img.widgetId) ? "Aranıyor..." : "Otomatik Bul"}
+                        </button>
                         <button
                           onClick={() => setStockPickerForWidget(img.widgetId)}
                           className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"

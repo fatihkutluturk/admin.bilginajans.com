@@ -16,6 +16,12 @@ export type AppSettings = {
     username?: string;
     appPassword?: string;
   };
+  serpbear?: {
+    url?: string;
+    apiKey?: string;
+    username?: string;
+    password?: string;
+  };
 };
 
 function loadSettings(): AppSettings {
@@ -61,6 +67,16 @@ export function getWordPressConfig(): { url: string; username: string; appPasswo
 export function getPublicWpUrl(): string {
   const settings = loadSettings();
   return settings.wordpress?.url || process.env.NEXT_PUBLIC_WP_URL || process.env.WP_URL || "";
+}
+
+export function getSerpBearConfig(): { url: string; apiKey: string; username: string; password: string } {
+  const settings = loadSettings();
+  return {
+    url: settings.serpbear?.url || process.env.SERPBEAR_URL || "",
+    apiKey: settings.serpbear?.apiKey || process.env.SERPBEAR_API_KEY || "",
+    username: settings.serpbear?.username || process.env.SERPBEAR_USERNAME || "",
+    password: settings.serpbear?.password || process.env.SERPBEAR_PASSWORD || "",
+  };
 }
 
 export function getPromptConfig(): PromptConfig {

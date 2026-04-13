@@ -18,6 +18,12 @@ export async function GET() {
         username: settings.wordpress?.username || process.env.WP_USERNAME || "",
         appPassword: settings.wordpress?.appPassword || process.env.WP_APP_PASSWORD || "",
       },
+      serpbear: {
+        url: settings.serpbear?.url || process.env.SERPBEAR_URL || "",
+        apiKey: settings.serpbear?.apiKey || process.env.SERPBEAR_API_KEY || "",
+        username: settings.serpbear?.username || process.env.SERPBEAR_USERNAME || "",
+        password: settings.serpbear?.password || process.env.SERPBEAR_PASSWORD || "",
+      },
     });
   } catch (error) {
     return NextResponse.json(
@@ -29,13 +35,14 @@ export async function GET() {
 
 export async function PUT(req: NextRequest) {
   try {
-    const { config, apiKeys, wordpress } = await req.json();
+    const { config, apiKeys, wordpress, serpbear } = await req.json();
     const existing = getSettings();
     saveSettings({
       ...existing,
       prompts: config || existing.prompts,
       apiKeys: apiKeys || existing.apiKeys,
       wordpress: wordpress || existing.wordpress,
+      serpbear: serpbear || existing.serpbear,
     });
     return NextResponse.json({ success: true });
   } catch (error) {

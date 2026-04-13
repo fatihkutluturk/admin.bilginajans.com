@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "WP Yönetici",
-  description: "AI destekli WordPress site yönetimi",
+  title: "SEO Pilot",
+  description: "Otomatik SEO yönetimi ve içerik optimizasyonu",
 };
 
 export default function RootLayout({
