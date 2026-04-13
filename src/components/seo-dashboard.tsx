@@ -27,7 +27,13 @@ type InsightApiData = { pages: InsightPage[]; keywords: InsightKeyword[] };
 type CompetitorKeyword = { keyword: string; theirPosition: number; yourPosition: number };
 type CompetitorEntry = { domain: string; keywordsInCommon: number; avgPosition: number; keywords: CompetitorKeyword[] };
 type SerpByKeyword = { keyword: string; yourPosition: number; topCompetitors: Array<{ domain: string; position: number; title: string; url: string }> };
-type Tab = "overview" | "rankings" | "insights" | "competitors";
+type PageSpeedResult = {
+  url: string; fetchedAt: string;
+  scores: { performance: number; seo: number; accessibility: number; bestPractices: number };
+  webVitals: Record<string, { value: number; unit: string; rating: "good" | "needs-improvement" | "poor" }>;
+  error?: string;
+};
+type Tab = "overview" | "rankings" | "competitors" | "performance" | "insights";
 type RankSubView = "list" | "detail" | "add-keyword";
 
 export function SeoDashboard({ onNavigateSettings }: { onNavigateSettings: () => void }) {
@@ -210,7 +216,7 @@ export function SeoDashboard({ onNavigateSettings }: { onNavigateSettings: () =>
 
         {/* Tabs */}
         <div className="mt-4 flex gap-1">
-          {(["overview", "rankings", "competitors", "insights"] as Tab[]).map(t => (
+          {(["overview", "rankings", "competitors", "performance", "insights"] as Tab[]).map(t => (
             <button key={t} onClick={() => setTab(t)} className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${tab === t ? "bg-indigo-600 text-white shadow-sm" : "text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"}`}>
               {tr.seo.tabs[t]}
             </button>
@@ -227,6 +233,7 @@ export function SeoDashboard({ onNavigateSettings }: { onNavigateSettings: () =>
         {tab === "overview" && <OverviewTab scData={scData} insightData={insightApiData} loading={scLoading} keywords={keywords} />}
         {tab === "rankings" && <RankingsTab keywords={keywords} loading={keywordsLoading} search={search} setSearch={setSearch} sortField={sortField} setSortField={setSortField} sortAsc={sortAsc} setSortAsc={setSortAsc} getPositionChange={getPositionChange} deletingId={deletingId} onDelete={handleDeleteKeyword} onSelect={kw => { setSelectedKeyword(kw); setRankSubView("detail"); }} />}
         {tab === "competitors" && <CompetitorsTab competitors={competitors} serpByKeyword={serpByKeyword} loading={competitorsLoading} trackedCompetitors={trackedCompetitors} onToggleTrack={(domain) => setTrackedCompetitors(prev => prev.includes(domain) ? prev.filter(d => d !== domain) : [...prev, domain])} />}
+        {tab === "performance" && <PerformanceTab domain={selectedDomain} trackedCompetitors={trackedCompetitors} />}
         {tab === "insights" && <InsightsTab insights={insights} loading={insightsLoading} />}
       </div>
     </div>
@@ -681,6 +688,247 @@ function CompetitorsTab({ competitors, serpByKeyword, loading, trackedCompetitor
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ---- Performance Tab ----
+
+function PerformanceTab({ domain, trackedCompetitors }: { domain: string; trackedCompetitors: string[] }) {
+  const [results, setResults] = usePersistedState<Record<string, PageSpeedResult>>("seo:pagespeed", {});
+  const [analyzing, setAnalyzing] = useState<Set<string>>(new Set());
+
+  const allUrls = [domain, ...trackedCompetitors].filter(Boolean);
+
+  const analyzeUrl = async (url: string) => {
+    setAnalyzing(prev => new Set(prev).add(url));
+    try {
+      const res = await fetch(`/api/seo/pagespeed?url=${encodeURIComponent(url)}`);
+      const data: PageSpeedResult = await res.json();
+      setResults(prev => ({ ...prev, [url]: data }));
+    } catch { /* silent */ }
+    finally { setAnalyzing(prev => { const n = new Set(prev); n.delete(url); return n; }); }
+  };
+
+  const analyzeAll = async () => {
+    for (const url of allUrls) {
+      if (!results[url] || analyzing.has(url)) await analyzeUrl(url);
+    }
+  };
+
+  const scoreColor = (score: number) => {
+    if (score >= 90) return "text-green-600 dark:text-green-400";
+    if (score >= 50) return "text-yellow-600 dark:text-yellow-400";
+    return "text-red-600 dark:text-red-400";
+  };
+
+  const scoreBg = (score: number) => {
+    if (score >= 90) return "stroke-green-500";
+    if (score >= 50) return "stroke-yellow-500";
+    return "stroke-red-500";
+  };
+
+  const ratingColor = (rating: string) => {
+    if (rating === "good") return "text-green-600 bg-green-50 dark:text-green-400 dark:bg-green-900/20";
+    if (rating === "needs-improvement") return "text-yellow-600 bg-yellow-50 dark:text-yellow-400 dark:bg-yellow-900/20";
+    return "text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-900/20";
+  };
+
+  const ratingLabel = (rating: string) => {
+    if (rating === "good") return tr.seo.pagespeed.good;
+    if (rating === "needs-improvement") return tr.seo.pagespeed.needsImprovement;
+    return tr.seo.pagespeed.poor;
+  };
+
+  const formatTimeAgo = (dateStr: string) => {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    if (hours > 24) return `${Math.floor(hours / 24)} gün önce`;
+    if (hours > 0) return `${hours} saat önce`;
+    if (mins > 0) return `${mins} dk önce`;
+    return "az önce";
+  };
+
+  if (trackedCompetitors.length === 0) {
+    return (
+      <div className="px-6 py-4">
+        {/* Still show own site */}
+        <div className="mb-6 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{tr.seo.pagespeed.title}</h3>
+          {domain && !results[domain] && (
+            <button onClick={() => analyzeUrl(domain)} disabled={analyzing.has(domain)} className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+              {analyzing.has(domain) ? tr.seo.pagespeed.analyzing : tr.seo.pagespeed.analyze}
+            </button>
+          )}
+        </div>
+        {results[domain] && <ScoreCard result={results[domain]} label={tr.seo.pagespeed.yourSite} scoreColor={scoreColor} scoreBg={scoreBg} ratingColor={ratingColor} ratingLabel={ratingLabel} formatTimeAgo={formatTimeAgo} onReanalyze={() => analyzeUrl(domain)} analyzing={analyzing.has(domain)} />}
+        <div className="mt-6 rounded-xl border border-dashed border-gray-200 bg-gray-50/50 p-6 text-center text-sm text-gray-400 dark:border-gray-700 dark:bg-gray-900/50">
+          {tr.seo.pagespeed.noTrackedCompetitors}
+        </div>
+      </div>
+    );
+  }
+
+  const hasAnyResult = allUrls.some(u => results[u]);
+
+  return (
+    <div className="px-6 py-4 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{tr.seo.pagespeed.title}</h3>
+          <p className="text-xs text-gray-400">{tr.seo.pagespeed.desc}</p>
+        </div>
+        <button onClick={analyzeAll} disabled={analyzing.size > 0} className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+          {analyzing.size > 0 ? tr.seo.pagespeed.analyzing : (hasAnyResult ? tr.seo.pagespeed.reanalyze : tr.seo.pagespeed.analyze)}
+        </button>
+      </div>
+
+      {/* Score comparison table */}
+      {hasAnyResult && (
+        <div className="rounded-xl border border-gray-100 bg-white dark:border-gray-800 dark:bg-gray-900 overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="text-left text-xs font-medium uppercase tracking-wider text-gray-400 bg-gray-50/80 dark:bg-gray-950/50">
+                <th className="px-4 py-3">Site</th>
+                <th className="px-4 py-3 text-center">{tr.seo.pagespeed.performance}</th>
+                <th className="px-4 py-3 text-center">{tr.seo.pagespeed.seoScore}</th>
+                <th className="px-4 py-3 text-center">{tr.seo.pagespeed.accessibility}</th>
+                <th className="px-4 py-3 text-center">{tr.seo.pagespeed.bestPractices}</th>
+                <th className="px-4 py-3 text-center">LCP</th>
+                <th className="px-4 py-3 text-center">CLS</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50 dark:divide-gray-800/50">
+              {allUrls.map(url => {
+                const r = results[url];
+                const isYou = url === domain;
+                if (!r) return (
+                  <tr key={url}>
+                    <td className="px-4 py-3">
+                      <span className={`text-sm ${isYou ? "font-semibold text-indigo-700 dark:text-indigo-400" : "text-gray-700 dark:text-gray-300"}`}>{url}</span>
+                      {isYou && <span className="ml-2 text-xs text-indigo-500">({tr.seo.pagespeed.yourSite.toLowerCase()})</span>}
+                    </td>
+                    <td colSpan={6} className="px-4 py-3 text-center">
+                      <button onClick={() => analyzeUrl(url)} disabled={analyzing.has(url)} className="text-xs text-indigo-600 hover:underline disabled:opacity-50">
+                        {analyzing.has(url) ? tr.seo.pagespeed.analyzing : tr.seo.pagespeed.analyze}
+                      </button>
+                    </td>
+                  </tr>
+                );
+                return (
+                  <tr key={url} className={isYou ? "bg-indigo-50/30 dark:bg-indigo-900/5" : ""}>
+                    <td className="px-4 py-3">
+                      <span className={`text-sm ${isYou ? "font-semibold text-indigo-700 dark:text-indigo-400" : "text-gray-700 dark:text-gray-300"}`}>{url}</span>
+                      {isYou && <span className="ml-2 text-xs text-indigo-500">({tr.seo.pagespeed.yourSite.toLowerCase()})</span>}
+                      {r.fetchedAt && <p className="text-xs text-gray-300 dark:text-gray-600">{formatTimeAgo(r.fetchedAt)}</p>}
+                    </td>
+                    <td className="px-4 py-3 text-center"><ScoreCircle score={r.scores.performance} scoreColor={scoreColor} scoreBg={scoreBg} /></td>
+                    <td className="px-4 py-3 text-center"><ScoreCircle score={r.scores.seo} scoreColor={scoreColor} scoreBg={scoreBg} /></td>
+                    <td className="px-4 py-3 text-center"><ScoreCircle score={r.scores.accessibility} scoreColor={scoreColor} scoreBg={scoreBg} /></td>
+                    <td className="px-4 py-3 text-center"><ScoreCircle score={r.scores.bestPractices} scoreColor={scoreColor} scoreBg={scoreBg} /></td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${ratingColor(r.webVitals.lcp?.rating || "poor")}`}>
+                        {r.webVitals.lcp?.value ? `${(r.webVitals.lcp.value / 1000).toFixed(1)}s` : "-"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${ratingColor(r.webVitals.cls?.rating || "poor")}`}>
+                        {r.webVitals.cls?.value !== undefined ? r.webVitals.cls.value.toFixed(3) : "-"}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Detailed cards per site */}
+      {allUrls.filter(u => results[u]).map(url => {
+        const r = results[url]!;
+        const isYou = url === domain;
+        return (
+          <ScoreCard key={url} result={r} label={isYou ? tr.seo.pagespeed.yourSite : url} scoreColor={scoreColor} scoreBg={scoreBg} ratingColor={ratingColor} ratingLabel={ratingLabel} formatTimeAgo={formatTimeAgo} onReanalyze={() => analyzeUrl(url)} analyzing={analyzing.has(url)} highlight={isYou} />
+        );
+      })}
+    </div>
+  );
+}
+
+function ScoreCircle({ score, scoreColor, scoreBg }: { score: number; scoreColor: (s: number) => string; scoreBg: (s: number) => string }) {
+  const circumference = 2 * Math.PI * 16;
+  const offset = circumference - (score / 100) * circumference;
+  return (
+    <div className="relative inline-flex h-10 w-10 items-center justify-center">
+      <svg className="h-10 w-10 -rotate-90" viewBox="0 0 36 36">
+        <circle cx="18" cy="18" r="16" fill="none" stroke="#e5e7eb" strokeWidth="2.5" className="dark:stroke-gray-700" />
+        <circle cx="18" cy="18" r="16" fill="none" strokeWidth="2.5" strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={offset} className={scoreBg(score)} />
+      </svg>
+      <span className={`absolute text-xs font-bold tabular-nums ${scoreColor(score)}`}>{score}</span>
+    </div>
+  );
+}
+
+function ScoreCard({ result, label, scoreColor, scoreBg, ratingColor, ratingLabel, formatTimeAgo, onReanalyze, analyzing, highlight }: {
+  result: PageSpeedResult; label: string;
+  scoreColor: (s: number) => string; scoreBg: (s: number) => string;
+  ratingColor: (r: string) => string; ratingLabel: (r: string) => string;
+  formatTimeAgo: (d: string) => string; onReanalyze: () => void; analyzing: boolean; highlight?: boolean;
+}) {
+  const vitals = [
+    { key: "lcp", label: tr.seo.pagespeed.lcp, format: (v: number) => `${(v / 1000).toFixed(1)} s` },
+    { key: "fcp", label: tr.seo.pagespeed.fcp, format: (v: number) => `${(v / 1000).toFixed(1)} s` },
+    { key: "cls", label: tr.seo.pagespeed.cls, format: (v: number) => v.toFixed(3) },
+    { key: "inp", label: tr.seo.pagespeed.inp, format: (v: number) => `${v} ms` },
+    { key: "ttfb", label: tr.seo.pagespeed.ttfb, format: (v: number) => `${v} ms` },
+  ];
+
+  return (
+    <div className={`rounded-xl border p-4 ${highlight ? "border-indigo-200 bg-indigo-50/30 dark:border-indigo-800 dark:bg-indigo-900/5" : "border-gray-100 bg-white dark:border-gray-800 dark:bg-gray-900"}`}>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h4 className="text-sm font-semibold text-gray-900 dark:text-white">{label}</h4>
+          {result.fetchedAt && <p className="text-xs text-gray-400">{tr.seo.pagespeed.cachedAt}: {formatTimeAgo(result.fetchedAt)}</p>}
+        </div>
+        <button onClick={onReanalyze} disabled={analyzing} className="text-xs text-indigo-600 hover:underline disabled:opacity-50 dark:text-indigo-400">
+          {analyzing ? tr.seo.pagespeed.analyzing : tr.seo.pagespeed.reanalyze}
+        </button>
+      </div>
+
+      {/* Score circles */}
+      <div className="flex items-center gap-6 mb-4">
+        {([
+          [tr.seo.pagespeed.performance, result.scores.performance],
+          [tr.seo.pagespeed.seoScore, result.scores.seo],
+          [tr.seo.pagespeed.accessibility, result.scores.accessibility],
+          [tr.seo.pagespeed.bestPractices, result.scores.bestPractices],
+        ] as [string, number][]).map(([lbl, score]) => (
+          <div key={lbl} className="flex flex-col items-center gap-1">
+            <ScoreCircle score={score} scoreColor={scoreColor} scoreBg={scoreBg} />
+            <span className="text-xs text-gray-500 dark:text-gray-400">{lbl}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Core Web Vitals */}
+      <h5 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">{tr.seo.pagespeed.coreWebVitals}</h5>
+      <div className="grid grid-cols-5 gap-2">
+        {vitals.map(v => {
+          const data = result.webVitals[v.key];
+          if (!data) return null;
+          return (
+            <div key={v.key} className={`rounded-lg p-2 text-center ${ratingColor(data.rating)}`}>
+              <p className="text-xs font-medium opacity-70">{v.label.split("(")[0].trim()}</p>
+              <p className="text-sm font-bold tabular-nums">{v.format(data.value)}</p>
+              <p className="text-xs opacity-70">{ratingLabel(data.rating)}</p>
+            </div>
+          );
+        })}
+      </div>
+
+      {result.error && <p className="mt-2 text-xs text-red-500">{result.error}</p>}
     </div>
   );
 }
