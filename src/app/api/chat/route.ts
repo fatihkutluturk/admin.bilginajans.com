@@ -26,67 +26,66 @@ export async function POST(req: NextRequest) {
 
         // --- Approval/Rejection flow ---
         if (pendingAction) {
-          const { functionCall, approved } = pendingAction;
+          const { writes, approved } = pendingAction as { writes: Array<{ functionCall: { name: string; args: Record<string, unknown> }; summary: string }>; approved: boolean; combinedSummary: string };
 
-          if (approved) {
-            if (!isKnownTool(functionCall.name)) {
-              send({ type: "error", content: "Unknown tool" });
-              controller.close();
-              return;
+          if (approved && writes?.length) {
+            const results: string[] = [];
+            let hasError = false;
+
+            for (const write of writes) {
+              const { name, args } = write.functionCall;
+              if (!isKnownTool(name)) {
+                results.push(`Unknown tool: ${name}`);
+                hasError = true;
+                continue;
+              }
+              try {
+                await executeTool(name, args);
+                results.push(`${write.summary}: OK`);
+              } catch (error) {
+                results.push(`${write.summary}: FAILED — ${error instanceof Error ? error.message : "Error"}`);
+                hasError = true;
+              }
             }
 
+            // Get Gemini's follow-up response
+            const historyForResult: Content[] = [
+              ...messagesToGeminiHistory(messages),
+              {
+                role: "model",
+                parts: writes.map((w) => ({
+                  functionCall: { name: w.functionCall.name, args: w.functionCall.args },
+                })),
+              },
+              {
+                role: "user",
+                parts: writes.map((w) => ({
+                  functionResponse: {
+                    name: w.functionCall.name,
+                    response: { result: results.join("; ") },
+                  },
+                })),
+              },
+            ];
+
             try {
-              const result = await executeTool(
-                functionCall.name,
-                functionCall.args
-              );
-
-              const history: Content[] = [
-                ...messagesToGeminiHistory(messages),
-                {
-                  role: "model",
-                  parts: [
-                    {
-                      functionCall: {
-                        name: functionCall.name,
-                        args: functionCall.args,
-                      },
-                    },
-                  ],
-                },
-                {
-                  role: "user",
-                  parts: [
-                    {
-                      functionResponse: {
-                        name: functionCall.name,
-                        response: { result },
-                      },
-                    },
-                  ],
-                },
-              ];
-
-              const response = await chatWithToolResult(history);
+              const response = await chatWithToolResult(historyForResult);
               const text =
                 response.candidates?.[0]?.content?.parts?.[0]?.text ||
-                "Action completed successfully.";
+                (hasError ? results.join("\n") : "İşlemler başarıyla uygulandı.");
               send({ type: "result", content: text });
-            } catch (error) {
-              send({
-                type: "error",
-                content: `Failed to execute: ${error instanceof Error ? error.message : "Unknown error"}`,
-              });
+            } catch {
+              send({ type: "result", content: hasError ? results.join("\n") : "İşlemler başarıyla uygulandı." });
             }
           } else {
             const history = messagesToGeminiHistory(messages);
             const response = await chatWithGemini(
               history,
-              "I cancelled that action. Don't proceed with it."
+              "Kullanıcı işlemi iptal etti. Devam etme."
             );
             const text =
               response.candidates?.[0]?.content?.parts?.[0]?.text ||
-              "OK, action cancelled.";
+              "İşlem iptal edildi.";
             send({ type: "text", content: text });
           }
 
@@ -106,7 +105,8 @@ export async function POST(req: NextRequest) {
         let response = await chatWithGemini(history, lastMessage.content);
 
         let iterations = 0;
-        const MAX_ITERATIONS = 5;
+        const MAX_ITERATIONS = 8;
+        const queuedWrites: Array<{ name: string; args: Record<string, unknown>; summary: string }> = [];
 
         while (iterations < MAX_ITERATIONS) {
           const candidate = response.candidates?.[0];
@@ -115,11 +115,29 @@ export async function POST(req: NextRequest) {
           const functionCallPart = parts.find((p) => p.functionCall);
 
           if (!functionCallPart?.functionCall) {
+            // Gemini done reasoning — send text + any queued writes
             const text = parts
               .map((p) => p.text)
               .filter(Boolean)
               .join("");
-            if (text) {
+
+            if (queuedWrites.length > 0) {
+              // Send AI's explanation text first
+              if (text) {
+                send({ type: "text", content: text });
+              }
+              // Then send batch confirmation
+              send({
+                type: "confirmation",
+                pendingAction: {
+                  writes: queuedWrites.map((w) => ({
+                    functionCall: { name: w.name, args: w.args },
+                    summary: w.summary,
+                  })),
+                  combinedSummary: queuedWrites.map((w) => w.summary).join("\n"),
+                },
+              });
+            } else if (text) {
               send({ type: "text", content: text });
             }
             break;
@@ -134,14 +152,57 @@ export async function POST(req: NextRequest) {
           }
 
           if (classifyTool(name) === "write") {
-            send({
-              type: "confirmation",
-              pendingAction: {
-                functionCall: { name, args },
-                summary: summarizeAction(name, args),
+            // Queue the write — don't execute, don't break
+            const summary = summarizeAction(name, args);
+            queuedWrites.push({ name, args, summary });
+
+            // Send synthetic "queued" result back to Gemini so it can continue reasoning
+            const updatedHistory: Content[] = [
+              ...history,
+              { role: "user", parts: [{ text: lastMessage.content }] },
+              {
+                role: "model",
+                parts: [{ functionCall: { name, args } }],
               },
-            });
-            break;
+              {
+                role: "user",
+                parts: [
+                  {
+                    functionResponse: {
+                      name,
+                      response: {
+                        result: {
+                          status: "queued_for_approval",
+                          action: summary,
+                          message: "Bu işlem kullanıcı onayı bekliyor. Kullanıcıya ne yapılacağını açıkla.",
+                        },
+                      },
+                    },
+                  },
+                ],
+              },
+            ];
+
+            response = await chatWithToolResult(updatedHistory);
+            history.push(
+              { role: "user", parts: [{ text: lastMessage.content }] },
+              { role: "model", parts: [{ functionCall: { name, args } }] },
+              {
+                role: "user",
+                parts: [
+                  {
+                    functionResponse: {
+                      name,
+                      response: {
+                        result: { status: "queued_for_approval", action: summary },
+                      },
+                    },
+                  },
+                ],
+              }
+            );
+            iterations++;
+            continue;
           }
 
           // Read operation → execute immediately
@@ -170,7 +231,6 @@ export async function POST(req: NextRequest) {
 
             response = await chatWithToolResult(updatedHistory);
 
-            // Update history for potential chaining
             history.push(
               { role: "user", parts: [{ text: lastMessage.content }] },
               { role: "model", parts: [{ functionCall: { name, args } }] },
@@ -197,10 +257,23 @@ export async function POST(req: NextRequest) {
         }
 
         if (iterations >= MAX_ITERATIONS) {
-          send({
-            type: "error",
-            content: "Too many tool calls. Please try a simpler request.",
-          });
+          if (queuedWrites.length > 0) {
+            send({
+              type: "confirmation",
+              pendingAction: {
+                writes: queuedWrites.map((w) => ({
+                  functionCall: { name: w.name, args: w.args },
+                  summary: w.summary,
+                })),
+                combinedSummary: queuedWrites.map((w) => w.summary).join("\n"),
+              },
+            });
+          } else {
+            send({
+              type: "error",
+              content: "Too many tool calls. Please try a simpler request.",
+            });
+          }
         }
       } catch (error) {
         send({
