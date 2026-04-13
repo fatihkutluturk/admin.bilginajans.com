@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
     const updatedData = applyTextUpdates(elementorData, updates);
 
     // 6. Save the Elementor data to the new page
-    await updateElementorData(newPage.id, JSON.stringify(updatedData));
+    await updateElementorData(newPage.id, "pages", JSON.stringify(updatedData));
 
     return NextResponse.json({
       success: true,

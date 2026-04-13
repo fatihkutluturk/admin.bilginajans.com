@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     });
 
     // 3. Copy the template's Elementor data to the new page
-    await updateElementorData(newPage.id, typeof rawData === "string" ? rawData : JSON.stringify(rawData));
+    await updateElementorData(newPage.id, "pages", typeof rawData === "string" ? rawData : JSON.stringify(rawData));
 
     // 4. Set Elementor edit mode so it renders from the data
     await wpFetchDirect(`/wp/v2/pages/${newPage.id}`, {

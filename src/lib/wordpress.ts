@@ -271,31 +271,30 @@ export async function uploadMedia(
 
 // ---- Elementor ----
 
-export async function getPageWithMeta(id: number) {
-  return wpFetch(`/wp/v2/pages/${id}?context=edit`);
+export async function getPageWithMeta(id: number, type: "pages" | "posts" = "pages") {
+  const endpoint = type === "posts" ? "posts" : "pages";
+  return wpFetch(`/wp/v2/${endpoint}/${id}?context=edit`);
 }
 
-export async function updateElementorData(id: number, elementorData: string) {
-  return wpFetch(`/wp/v2/pages/${id}`, {
+export async function updateElementorData(id: number, type: "pages" | "posts" = "pages", elementorData: string, content?: string) {
+  const endpoint = type === "posts" ? "posts" : "pages";
+  const body: Record<string, unknown> = {
+    meta: {
+      _elementor_data: elementorData,
+      _elementor_edit_mode: "builder",
+      _elementor_css: "",
+    },
+  };
+  if (content !== undefined) body.content = content;
+  return wpFetch(`/wp/v2/${endpoint}/${id}`, {
     method: "POST",
-    body: JSON.stringify({
-      meta: { _elementor_data: elementorData },
-    }),
+    body: JSON.stringify(body),
   });
 }
 
-export async function getPostWithMeta(id: number) {
-  return wpFetch(`/wp/v2/posts/${id}?context=edit`);
-}
-
-export async function updatePostElementorData(id: number, elementorData: string) {
-  return wpFetch(`/wp/v2/posts/${id}`, {
-    method: "POST",
-    body: JSON.stringify({
-      meta: { _elementor_data: elementorData },
-    }),
-  });
-}
+// Keep backwards-compatible aliases
+export const getPostWithMeta = (id: number) => getPageWithMeta(id, "posts");
+export const updatePostElementorData = (id: number, elementorData: string) => updateElementorData(id, "posts", elementorData);
 
 // ---- Elementor Library (Templates) ----
 
@@ -314,11 +313,35 @@ export async function getTemplateWithMeta(id: number) {
   return wpFetch(`/wp/v2/elementor_library/${id}?context=edit`);
 }
 
-export async function updateTemplateElementorData(id: number, elementorData: string) {
+export async function updateTemplateElementorData(id: number, elementorData: string, content?: string) {
+  const body: Record<string, unknown> = {
+    meta: {
+      _elementor_data: elementorData,
+      _elementor_edit_mode: "builder",
+      _elementor_css: "",
+    },
+  };
+  if (content !== undefined) body.content = content;
   return wpFetch(`/wp/v2/elementor_library/${id}`, {
     method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+// ---- Page Settings (Elementor per-page overrides) ----
+
+export async function getPageSettings(id: number, type: "pages" | "posts" = "pages") {
+  const endpoint = type === "posts" ? "posts" : "pages";
+  const data = await wpFetch(`/wp/v2/${endpoint}/${id}?context=edit`);
+  return data.meta?._elementor_page_settings || {};
+}
+
+export async function updatePageSettings(id: number, type: "pages" | "posts", settings: Record<string, unknown>) {
+  const endpoint = type === "posts" ? "posts" : "pages";
+  return wpFetch(`/wp/v2/${endpoint}/${id}`, {
+    method: "POST",
     body: JSON.stringify({
-      meta: { _elementor_data: elementorData },
+      meta: { _elementor_page_settings: JSON.stringify(settings) },
     }),
   });
 }

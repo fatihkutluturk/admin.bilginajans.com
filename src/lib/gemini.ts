@@ -1,5 +1,5 @@
 import "server-only";
-import { GoogleGenAI, Type, Content, FunctionDeclaration } from "@google/genai";
+import { GoogleGenAI, Type, Content, FunctionDeclaration, FunctionCallingConfigMode } from "@google/genai";
 import { getChatSystemPrompt, getElementorContentPrompt, getAltTextPrompt, getContentIdeasPrompt, getGeminiApiKey } from "./prompts";
 
 function getAI() {
@@ -116,13 +116,14 @@ export const toolDeclarations: FunctionDeclaration[] = [
   },
   {
     name: "list_pages",
-    description: "List WordPress pages.",
+    description: "List WordPress pages. Use 'slug' to find a page by its URL slug (most reliable). Use 'search' for keyword search in title/content.",
     parameters: {
       type: Type.OBJECT,
       properties: {
         per_page: { type: Type.NUMBER, description: "Number of pages" },
         page: { type: Type.NUMBER, description: "Page number" },
-        search: { type: Type.STRING, description: "Search term" },
+        search: { type: Type.STRING, description: "Search term to filter by title/content" },
+        slug: { type: Type.STRING, description: "Filter by exact URL slug (e.g. 'blog-4', 'hakkimizda'). Most reliable way to find a specific page." },
         status: { type: Type.STRING, description: "Page status" },
         orderby: { type: Type.STRING, description: "Sort by" },
         order: { type: Type.STRING, description: "Sort order" },
@@ -250,6 +251,76 @@ export const toolDeclarations: FunctionDeclaration[] = [
     parameters: {
       type: Type.OBJECT,
       properties: {},
+    },
+  },
+  // ---- Elementor JSON editing tools ----
+  {
+    name: "get_elementor_json",
+    description:
+      "Get the full Elementor JSON structure for a page, post, or template. Returns all widgets with their settings (styles, colors, fonts, responsive overrides). Use this to understand the current design before making changes.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        id: { type: Type.NUMBER, description: "Page/post/template ID" },
+        content_type: { type: Type.STRING, description: "Type: 'pages' (default for most content), 'posts', or 'templates' (for headers/footers)" },
+      },
+      required: ["id", "content_type"],
+    },
+  },
+  {
+    name: "update_elementor_styles",
+    description:
+      "Update Elementor widget settings (styles, colors, fonts, spacing, responsive overrides). Provide patches with element IDs and the settings to change. Settings keys follow Elementor conventions: title_color, typography_font_size, background_color, padding, border_radius, etc. For responsive: append _tablet or _mobile suffix.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        id: { type: Type.NUMBER, description: "Page/post/template ID" },
+        content_type: { type: Type.STRING, description: "Type: 'pages', 'posts', or 'templates'" },
+        patches: {
+          type: Type.ARRAY,
+          description: "Array of patches. Each patch has elementId and settings object.",
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              elementId: { type: Type.STRING, description: "The element/widget ID from the JSON" },
+              settings: { type: Type.OBJECT, description: "Settings key-value pairs to update" },
+            },
+            required: ["elementId", "settings"],
+          },
+        },
+      },
+      required: ["id", "content_type", "patches"],
+    },
+  },
+  {
+    name: "list_templates",
+    description:
+      "List Elementor Library templates. Can filter by template type (header, footer, section, page). Returns template IDs, titles, and types.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        per_page: { type: Type.NUMBER, description: "Number of templates (default 50)" },
+        template_type: { type: Type.STRING, description: "Filter by type: 'header', 'footer', 'section', 'page', or leave empty for all" },
+      },
+    },
+  },
+  {
+    name: "clone_element",
+    description:
+      "Clone an existing Elementor element (section, column, or widget) with new text content and insert it into the page. IMPORTANT: You MUST first call get_elementor_json to read the page structure, then decide which element to clone and where to insert it. This gives you full control over page structure — you can clone a single column (card), an entire row (section with multiple columns), or any element.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        page_id: { type: Type.NUMBER, description: "Target page/post/template ID" },
+        content_type: { type: Type.STRING, description: "Type: 'pages', 'posts', or 'templates'" },
+        source_element_id: { type: Type.STRING, description: "ID of the element to clone. Can be a section (row), column (card), or widget." },
+        text_overrides: {
+          type: Type.OBJECT,
+          description: "New text content for widgets in the cloned element. Keys format: 'widgetType:fieldKey:index' (index is 0-based for multiple widgets of same type). Examples: { 'heading:title:0': 'New Title', 'heading:title:1': 'Description', 'button:text': 'Read More' }. For button links, use 'button:link:url' key.",
+        },
+        insert_after_id: { type: Type.STRING, description: "ID of the element to insert AFTER. The clone will be placed as a sibling right after this element." },
+      },
+      required: ["page_id", "content_type", "source_element_id", "text_overrides", "insert_after_id"],
     },
   },
 ];

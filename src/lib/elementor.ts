@@ -396,3 +396,223 @@ export function applyImageUrlUpdates(
     return newEl;
   });
 }
+
+// ---- AI JSON editing ----
+
+/**
+ * Extracts a simplified-but-complete representation of the Elementor JSON
+ * suitable for AI context. Preserves all settings (styles, responsive overrides)
+ * but strips internal noise (edit timestamps, render attributes).
+ */
+/**
+ * Compact mode: returns structure + key content only (for AI decision making).
+ * Full mode: returns all settings (for detailed editing).
+ */
+export function extractJsonForAI(elements: ElementorElement[], compact = true): unknown[] {
+  return elements.map((el) => {
+    const node: Record<string, unknown> = {
+      id: el.id,
+      elType: el.elType,
+    };
+    if (el.widgetType) node.widgetType = el.widgetType;
+
+    if (el.settings && Object.keys(el.settings).length > 0) {
+      if (compact) {
+        // Only include content-relevant settings (text, links, key identifiers)
+        const s = el.settings;
+        const summary: Record<string, unknown> = {};
+        if (s.title) summary.title = s.title;
+        if (s.editor) summary.editor = String(s.editor).slice(0, 100);
+        if (s.text) summary.text = s.text;
+        if (s.header_size) summary.header_size = s.header_size;
+        if (s.link) summary.link = s.link;
+        if (s.structure) summary.structure = s.structure;
+        if (Object.keys(summary).length > 0) node.settings = summary;
+      } else {
+        const filtered: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(el.settings)) {
+          if (key.startsWith("__") || key === "_element_id") continue;
+          if (key === "_column_size" || key === "_inline_size") continue;
+          filtered[key] = value;
+        }
+        if (Object.keys(filtered).length > 0) node.settings = filtered;
+      }
+    }
+    if (el.elements?.length > 0) {
+      node.elements = extractJsonForAI(el.elements, compact);
+    }
+    return node;
+  });
+}
+
+/**
+ * Applies settings patches to elements by widget/element ID.
+ * Each patch is: { elementId, settings: { key: value } }
+ * Settings are deep-merged so partial updates work.
+ */
+export type ElementorPatch = {
+  elementId: string;
+  settings: Record<string, unknown>;
+};
+
+export function applyJsonPatches(
+  elements: ElementorElement[],
+  patches: ElementorPatch[]
+): ElementorElement[] {
+  const patchMap = new Map(patches.map((p) => [p.elementId, p.settings]));
+
+  return applyPatchesRecursive(elements, patchMap);
+}
+
+function applyPatchesRecursive(
+  elements: ElementorElement[],
+  patchMap: Map<string, Record<string, unknown>>
+): ElementorElement[] {
+  return elements.map((el) => {
+    const newEl = { ...el };
+
+    if (patchMap.has(el.id)) {
+      const patch = patchMap.get(el.id)!;
+      newEl.settings = deepMerge(el.settings, patch);
+    }
+
+    if (el.elements?.length) {
+      newEl.elements = applyPatchesRecursive(el.elements, patchMap);
+    }
+
+    return newEl;
+  });
+}
+
+function deepMerge(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>
+): Record<string, unknown> {
+  const result = { ...target };
+  for (const [key, value] of Object.entries(source)) {
+    if (
+      value !== null &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      typeof result[key] === "object" &&
+      result[key] !== null &&
+      !Array.isArray(result[key])
+    ) {
+      result[key] = deepMerge(
+        result[key] as Record<string, unknown>,
+        value as Record<string, unknown>
+      );
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+// ---- Clone & Insert elements ----
+
+function generateId(): string {
+  return Math.random().toString(36).substring(2, 9);
+}
+
+/**
+ * Deep-clones an Elementor element tree, assigning fresh IDs to all nodes.
+ */
+export function cloneElement(element: ElementorElement): ElementorElement {
+  return {
+    ...element,
+    id: generateId(),
+    settings: { ...element.settings },
+    elements: element.elements?.map(cloneElement) || [],
+  };
+}
+
+/**
+ * Clones an element and applies text overrides to its widgets.
+ * textOverrides maps widgetType+fieldKey patterns to new values.
+ * Example: { "heading:title": "New Title", "button:text": "Read More" }
+ * For multiple widgets of the same type, use index: "heading:title:0", "heading:title:1"
+ */
+export function cloneElementWithContent(
+  element: ElementorElement,
+  textOverrides: Record<string, string>
+): ElementorElement {
+  const cloned = cloneElement(element);
+  applyTextOverridesRecursive(cloned, textOverrides, {});
+  return cloned;
+}
+
+function applyTextOverridesRecursive(
+  el: ElementorElement,
+  overrides: Record<string, string>,
+  counters: Record<string, number>
+) {
+  if (el.elType === "widget" && el.widgetType) {
+    const wtype = el.widgetType;
+    // Check each possible field for this widget type
+    const fields = WIDGET_TEXT_FIELDS[wtype] || [];
+    for (const { fieldKey } of fields) {
+      const counterKey = `${wtype}:${fieldKey}`;
+      const idx = counters[counterKey] || 0;
+      counters[counterKey] = idx + 1;
+
+      // Try indexed key first, then non-indexed
+      const value = overrides[`${counterKey}:${idx}`] ?? overrides[counterKey];
+      if (value !== undefined) {
+        el.settings = { ...el.settings, [fieldKey]: value };
+      }
+    }
+  }
+  for (const child of el.elements || []) {
+    applyTextOverridesRecursive(child, overrides, counters);
+  }
+}
+
+/**
+ * Inserts a new element into the Elementor tree at a specified position.
+ * parentId: ID of the parent element (section/container) to insert into.
+ *   If null, inserts at the top level.
+ * position: "before" or "after" a reference element, or "end" to append.
+ * referenceId: ID of the element to insert before/after.
+ */
+export function insertElement(
+  elements: ElementorElement[],
+  newElement: ElementorElement,
+  parentId: string | null,
+  position: "before" | "after" | "end",
+  referenceId?: string
+): ElementorElement[] {
+  if (!parentId) {
+    // Insert at top level
+    if (position === "end") return [...elements, newElement];
+    return insertInArray(elements, newElement, position, referenceId);
+  }
+
+  return elements.map((el) => {
+    if (el.id === parentId) {
+      const newChildren = position === "end"
+        ? [...(el.elements || []), newElement]
+        : insertInArray(el.elements || [], newElement, position, referenceId);
+      return { ...el, elements: newChildren };
+    }
+    if (el.elements?.length) {
+      return { ...el, elements: insertElement(el.elements, newElement, parentId, position, referenceId) };
+    }
+    return el;
+  });
+}
+
+function insertInArray(
+  arr: ElementorElement[],
+  newEl: ElementorElement,
+  position: "before" | "after" | "end",
+  refId?: string
+): ElementorElement[] {
+  if (!refId || position === "end") return [...arr, newEl];
+  const idx = arr.findIndex((el) => el.id === refId);
+  if (idx === -1) return [...arr, newEl];
+  const insertIdx = position === "after" ? idx + 1 : idx;
+  const result = [...arr];
+  result.splice(insertIdx, 0, newEl);
+  return result;
+}
