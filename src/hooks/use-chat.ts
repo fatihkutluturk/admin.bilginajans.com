@@ -105,7 +105,7 @@ export function useChat() {
     // Add confirmation message to chat
     setMessages((prev) => [
       ...prev,
-      { role: "assistant", content: `Pending: ${action.summary}` },
+      { role: "assistant", content: `Pending: ${action.combinedSummary}` },
       { role: "user", content: "Approved" },
     ]);
 
@@ -113,7 +113,7 @@ export function useChat() {
       const body: ChatRequest = {
         messages: [
           ...messages,
-          { role: "assistant", content: action.summary },
+          { role: "assistant", content: action.combinedSummary },
           { role: "user", content: "Approved" },
         ],
         pendingAction: { ...action, approved: true },
@@ -149,7 +149,7 @@ export function useChat() {
 
     setMessages((prev) => [
       ...prev,
-      { role: "assistant", content: `Pending: ${action.summary}` },
+      { role: "assistant", content: `Pending: ${action.combinedSummary}` },
       { role: "user", content: "Rejected" },
     ]);
 
@@ -157,7 +157,7 @@ export function useChat() {
       const body: ChatRequest = {
         messages: [
           ...messages,
-          { role: "assistant", content: action.summary },
+          { role: "assistant", content: action.combinedSummary },
           { role: "user", content: "Rejected" },
         ],
         pendingAction: { ...action, approved: false },
