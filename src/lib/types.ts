@@ -9,12 +9,17 @@ export type Message = {
   content: string;
 };
 
-export type PendingAction = {
+export type QueuedWrite = {
   functionCall: {
     name: string;
     args: Record<string, unknown>;
   };
   summary: string;
+};
+
+export type PendingAction = {
+  writes: QueuedWrite[];
+  combinedSummary: string;
 };
 
 export type ChatRequest = {
