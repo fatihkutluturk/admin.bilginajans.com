@@ -17,12 +17,17 @@ export function ConfirmationCard({
   return (
     <div className="flex justify-start">
       <div className="max-w-[80%] rounded-2xl border-2 border-amber-400 bg-amber-50 px-5 py-4 dark:border-amber-500 dark:bg-amber-950">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
           {tr.chat.confirmationRequired}
         </p>
-        <p className="mb-3 text-sm text-gray-900 dark:text-gray-100">
-          {action.summary}
-        </p>
+        <div className="mb-3 space-y-1.5">
+          {action.writes.map((write, i) => (
+            <div key={i} className="flex items-start gap-2 text-sm text-gray-900 dark:text-gray-100">
+              <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+              <span>{write.summary}</span>
+            </div>
+          ))}
+        </div>
         <div className="flex gap-2">
           <button
             onClick={onApprove}
