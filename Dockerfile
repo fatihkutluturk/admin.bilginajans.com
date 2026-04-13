@@ -26,6 +26,10 @@ COPY --from=base /app/.next/standalone ./
 COPY --from=base /app/.next/static ./.next/static
 COPY --from=base /app/public ./public
 
+# Persistent data directory for settings
+RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
+VOLUME /app/data
+
 USER nextjs
 
 EXPOSE 3000

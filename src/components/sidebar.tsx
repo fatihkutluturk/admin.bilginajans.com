@@ -12,11 +12,12 @@ import {
   Search,
   TrendingUp,
   Zap,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 import { tr } from "@/lib/tr";
 
-export type View = "pages" | "posts" | "templates" | "blog-writer" | "seo" | "keyword-research" | "chat" | "settings";
+export type View = "pages" | "posts" | "templates" | "blog-writer" | "seo" | "keyword-research" | "audit" | "chat" | "settings";
 
 type NavItem = {
   id: View;
@@ -30,6 +31,7 @@ const seoItems: NavItem[] = [
 ];
 
 const contentItems: NavItem[] = [
+  { id: "audit", label: tr.nav.audit, icon: ShieldCheck },
   { id: "pages", label: tr.nav.pages, icon: FileText },
   { id: "posts", label: tr.nav.posts, icon: PenLine },
   { id: "templates", label: tr.nav.templates, icon: LayoutTemplate },

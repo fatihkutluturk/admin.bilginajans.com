@@ -10,6 +10,7 @@ export const tr = {
     pages: "Sayfalar",
     posts: "Yazılar",
     templates: "Şablonlar",
+    audit: "Site Tarama",
     blogWriter: "Otomatik İçerik",
     keywordResearch: "Kelime Araştırma",
     chat: "AI Asistan",

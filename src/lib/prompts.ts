@@ -3,7 +3,9 @@ import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { promptDefaults, PromptConfig } from "./prompt-defaults";
 
-const OVERRIDES_PATH = join(process.cwd(), ".settings.json");
+// Use /app/data for persistent storage in Docker, fallback to cwd for local dev
+const DATA_DIR = process.env.DATA_DIR || (existsSync("/app/data") ? "/app/data" : process.cwd());
+const OVERRIDES_PATH = join(DATA_DIR, ".settings.json");
 
 export type AppSettings = {
   prompts?: Partial<PromptConfig>;
