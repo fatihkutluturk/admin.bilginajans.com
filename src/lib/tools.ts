@@ -1,5 +1,6 @@
 import "server-only";
 import * as wp from "./wordpress";
+import { saveSnapshot } from "./undo";
 
 const WRITE_TOOLS = new Set([
   "create_post",
@@ -9,6 +10,8 @@ const WRITE_TOOLS = new Set([
   "update_page",
   "delete_page",
   "upload_media",
+  "update_elementor_styles",
+  "clone_element",
 ]);
 
 const KNOWN_TOOLS = new Set([
@@ -28,6 +31,10 @@ const KNOWN_TOOLS = new Set([
   "get_tag",
   "upload_media",
   "get_site_info",
+  "get_elementor_json",
+  "update_elementor_styles",
+  "list_templates",
+  "clone_element",
 ]);
 
 export function classifyTool(name: string): "read" | "write" {
@@ -57,6 +64,17 @@ export function summarizeAction(
       return `Delete page #${args.id}${args.force ? " permanently" : " (move to trash)"}`;
     case "upload_media":
       return `Upload media from ${args.url}${args.title ? ` as "${args.title}"` : ""}`;
+    case "update_elementor_styles": {
+      const patches = args.patches as Array<{ elementId: string; settings: Record<string, unknown> }> | undefined;
+      const count = patches?.length || 0;
+      const keys = patches?.flatMap(p => Object.keys(p.settings || {})).slice(0, 5).join(", ") || "";
+      return `Update Elementor styles on ${args.content_type} #${args.id} — ${count} element(s): ${keys}`;
+    }
+    case "clone_element": {
+      const overrides = args.text_overrides as Record<string, string> | undefined;
+      const label = overrides?.["heading:title:0"] || overrides?.["heading:title"] || "element";
+      return `"${label}" elementini klonlayıp ${args.content_type} #${args.page_id} sayfasına ekle`;
+    }
     default:
       return `Execute ${name}`;
   }
@@ -107,7 +125,175 @@ export async function executeTool(
       );
     case "get_site_info":
       return wp.getSiteInfo();
+
+    // ---- Elementor JSON editing ----
+    case "get_elementor_json": {
+      const { extractJsonForAI } = await import("./elementor");
+      const contentType = args.content_type as string;
+      let rawData: unknown;
+      let title = "";
+      if (contentType === "templates") {
+        const data = await wp.getTemplateWithMeta(args.id as number);
+        rawData = data.meta?._elementor_data;
+        title = data.title?.rendered || "";
+      } else {
+        const data = await wp.getPageWithMeta(args.id as number, contentType as "pages" | "posts");
+        rawData = data.meta?._elementor_data;
+        title = data.title?.rendered || "";
+      }
+      if (!rawData) return { title, elements: [], note: "No Elementor data found" };
+      const elements = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
+      return { title, elements: extractJsonForAI(elements) };
+    }
+
+    case "update_elementor_styles": {
+      const { applyJsonPatches, renderContentFromElementor } = await import("./elementor");
+      const contentType = args.content_type as string;
+      const patches = args.patches as Array<{ elementId: string; settings: Record<string, unknown> }>;
+
+      let rawData: unknown;
+      if (contentType === "templates") {
+        const data = await wp.getTemplateWithMeta(args.id as number);
+        rawData = data.meta?._elementor_data;
+      } else {
+        const data = await wp.getPageWithMeta(args.id as number, contentType as "pages" | "posts");
+        rawData = data.meta?._elementor_data;
+      }
+      if (!rawData) throw new Error("No Elementor data found");
+      const elements = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
+      saveSnapshot(args.id as number, contentType, typeof rawData === "string" ? rawData as string : JSON.stringify(rawData));
+      const updated = applyJsonPatches(elements, patches);
+      const content = renderContentFromElementor(updated);
+
+      if (contentType === "templates") {
+        await wp.updateTemplateElementorData(args.id as number, JSON.stringify(updated), content);
+      } else {
+        await wp.updateElementorData(args.id as number, contentType as "pages" | "posts", JSON.stringify(updated), content);
+      }
+      return {
+        success: true,
+        patchesApplied: patches.length,
+        summary: patches.map(p => `Element ${p.elementId}: ${Object.keys(p.settings).join(", ")}`),
+      };
+    }
+
+    case "list_templates": {
+      const params: Record<string, unknown> = { per_page: args.per_page || 50 };
+      const templates = await wp.listTemplates(params) as Array<Record<string, unknown>>;
+      const templateType = args.template_type as string | undefined;
+      if (templateType) {
+        return templates.filter((t) => {
+          const meta = t.meta as Record<string, string> | undefined;
+          const metaType = meta?._elementor_template_type || "";
+          const title = ((t.title as Record<string, string>)?.rendered || "").toLowerCase();
+          // Match by meta type OR by title containing the type name
+          if (metaType === templateType) return true;
+          if (templateType === "header" && title.includes("header")) return true;
+          if (templateType === "footer" && title.includes("footer")) return true;
+          return false;
+        });
+      }
+      // Filter out kit templates by default
+      return templates.filter((t) => {
+        const meta = t.meta as Record<string, string> | undefined;
+        return meta?._elementor_template_type !== "kit";
+      });
+    }
+
+    case "clone_element": {
+      const { cloneElementWithContent, insertElement, renderContentFromElementor } = await import("./elementor");
+      const contentType = args.content_type as string;
+      const pageId = args.page_id as number;
+      const sourceId = args.source_element_id as string;
+      const textOverrides = args.text_overrides as Record<string, string> || {};
+      const insertAfterId = args.insert_after_id as string;
+
+      // Read current data
+      let rawData: unknown;
+      if (contentType === "templates") {
+        const data = await wp.getTemplateWithMeta(pageId);
+        rawData = data.meta?._elementor_data;
+      } else {
+        const data = await wp.getPageWithMeta(pageId, contentType as "pages" | "posts");
+        rawData = data.meta?._elementor_data;
+      }
+      if (!rawData) throw new Error("Elementor verisi bulunamadı");
+      const elements = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
+
+      // Find the source element to clone
+      const source = findElementById(elements, sourceId);
+      if (!source) throw new Error(`Element ${sourceId} bulunamadı`);
+
+      // Handle button links in text_overrides
+      const buttonLinkUrl = textOverrides["button:link:url"];
+      const cleanOverrides = { ...textOverrides };
+      delete cleanOverrides["button:link:url"];
+
+      // Clone with text overrides
+      const cloned = cloneElementWithContent(source as import("./types").ElementorElement, cleanOverrides);
+
+      // Set button link if provided
+      if (buttonLinkUrl) {
+        function setBtnLink(el: Record<string, unknown>) {
+          if (el.widgetType === "button") {
+            const s = { ...(el.settings as Record<string, unknown>) };
+            s.link = { url: buttonLinkUrl, is_external: "", nofollow: "", custom_attributes: "" };
+            el.settings = s;
+          }
+          const ch = el.elements as Array<Record<string, unknown>> | undefined;
+          if (ch) ch.forEach(setBtnLink);
+        }
+        setBtnLink(cloned as unknown as Record<string, unknown>);
+      }
+
+      // Find where to insert: as sibling after insert_after_id
+      const parentId = findParentId(elements, insertAfterId);
+      saveSnapshot(pageId, contentType, typeof rawData === "string" ? rawData as string : JSON.stringify(rawData));
+      const updated = insertElement(elements, cloned, parentId, "after", insertAfterId);
+
+      // Save
+      const content = renderContentFromElementor(updated);
+      if (contentType === "templates") {
+        await wp.updateTemplateElementorData(pageId, JSON.stringify(updated), content);
+      } else {
+        await wp.updateElementorData(pageId, contentType as "pages" | "posts", JSON.stringify(updated), content);
+      }
+
+      return {
+        success: true,
+        clonedFrom: sourceId,
+        insertedAfter: insertAfterId,
+        newElementId: cloned.id,
+      };
+    }
+
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
+}
+
+// Helper: recursively find an element by ID
+function findElementById(elements: Array<Record<string, unknown>>, id: string): Record<string, unknown> | null {
+  for (const el of elements) {
+    if (el.id === id) return el;
+    const children = el.elements as Array<Record<string, unknown>> | undefined;
+    if (children?.length) {
+      const found = findElementById(children, id);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+// Helper: find the parent ID of an element
+function findParentId(elements: Array<Record<string, unknown>>, childId: string, currentParent: string | null = null): string | null {
+  for (const el of elements) {
+    const children = el.elements as Array<Record<string, unknown>> | undefined;
+    if (children?.some(c => c.id === childId)) return el.id as string;
+    if (children?.length) {
+      const found = findParentId(children, childId, el.id as string);
+      if (found) return found;
+    }
+  }
+  return currentParent;
 }
