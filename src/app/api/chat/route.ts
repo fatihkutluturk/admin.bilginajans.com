@@ -4,6 +4,16 @@ import { chatWithGemini, chatWithToolResult } from "@/lib/gemini";
 import { executeTool, classifyTool, isKnownTool, summarizeAction } from "@/lib/tools";
 import { ChatRequest, StreamChunk, Message } from "@/lib/types";
 
+function log(label: string, data?: unknown) {
+  const ts = new Date().toISOString().slice(11, 23);
+  if (data !== undefined) {
+    const str = typeof data === "string" ? data : JSON.stringify(data, null, 0);
+    console.log(`[CHAT ${ts}] ${label}: ${str.length > 500 ? str.slice(0, 500) + "..." : str}`);
+  } else {
+    console.log(`[CHAT ${ts}] ${label}`);
+  }
+}
+
 function messagesToGeminiHistory(messages: Message[]): Content[] {
   return messages.map((m) => ({
     role: m.role === "user" ? "user" : "model",
@@ -17,6 +27,7 @@ export async function POST(req: NextRequest) {
   const stream = new ReadableStream({
     async start(controller) {
       const send = (chunk: StreamChunk) => {
+        log("SEND", { type: chunk.type, contentLength: "content" in chunk ? chunk.content.length : 0, preview: "content" in chunk ? chunk.content.slice(0, 80) : "confirmation" });
         controller.enqueue(encoder.encode(JSON.stringify(chunk) + "\n"));
       };
 
@@ -27,6 +38,7 @@ export async function POST(req: NextRequest) {
         // --- Approval/Rejection flow ---
         if (pendingAction) {
           const { writes, approved } = pendingAction as { writes: Array<{ functionCall: { name: string; args: Record<string, unknown> }; summary: string }>; approved: boolean; combinedSummary: string };
+          log("APPROVAL_FLOW", { approved, writeCount: writes?.length });
 
           if (approved && writes?.length) {
             const results: string[] = [];
@@ -102,7 +114,9 @@ export async function POST(req: NextRequest) {
         }
 
         const history: Content[] = messagesToGeminiHistory(messages.slice(0, -1));
+        log("CHAT_START", { userMessage: lastMessage.content.slice(0, 100), historyLength: history.length });
         let response = await chatWithGemini(history, lastMessage.content);
+        log("GEMINI_RESPONSE", { candidates: response.candidates?.length, finishReason: response.candidates?.[0]?.finishReason });
 
         let iterations = 0;
         const MAX_ITERATIONS = 8;
@@ -113,10 +127,32 @@ export async function POST(req: NextRequest) {
           const parts: Part[] = candidate?.content?.parts || [];
 
           const functionCallPart = parts.find((p) => p.functionCall);
+          // Log all part keys to understand thought vs text structure
+          for (let pi = 0; pi < parts.length; pi++) {
+            const p = parts[pi] as Record<string, unknown>;
+            if (p.thought) {
+              log(`THOUGHT_${iterations}_${pi}`, String(p.text || "").slice(0, 500));
+            }
+          }
+          const textParts = parts.filter((p) => {
+            const pr = p as Record<string, unknown>;
+            return p.text && !pr.thought;
+          }).map((p) => p.text);
+          log(`LOOP_ITER_${iterations}`, {
+            hasFunctionCall: !!functionCallPart?.functionCall,
+            functionName: functionCallPart?.functionCall?.name,
+            textLength: textParts.join("").length,
+            textPreview: textParts.join("").slice(0, 100),
+            partsCount: parts.length,
+            partTypes: parts.map((p) => p.functionCall ? `fn:${p.functionCall.name}` : p.text ? `text:${String(p.text).length}` : "other"),
+            queuedWrites: queuedWrites.length,
+          });
 
           if (!functionCallPart?.functionCall) {
             // Gemini done reasoning — send text + any queued writes
+            // Filter out thought parts — only send actual response text
             const text = parts
+              .filter((p) => p.text && !(p as Record<string, unknown>).thought)
               .map((p) => p.text)
               .filter(Boolean)
               .join("");
@@ -137,6 +173,20 @@ export async function POST(req: NextRequest) {
                   combinedSummary: queuedWrites.map((w) => w.summary).join("\n"),
                 },
               });
+            } else if (iterations > 0 && queuedWrites.length === 0) {
+              // Model read data but didn't call a write tool — re-prompt to act
+              log("RE_PROMPT", "Model read data but produced text instead of write tool. Re-prompting.");
+              if (text) {
+                send({ type: "text", content: text });
+              }
+              history.push(
+                { role: "model", parts: [{ text: text || "Verileri okudum." }] },
+                { role: "user", parts: [{ text: "Verileri okudun. Şimdi gerekli write aracını çağır. Metin yanıt verme, doğrudan araç çağır." }] }
+              );
+              response = await chatWithGemini(history, "Verileri okudun. Şimdi gerekli write aracını (clone_element veya update_elementor_styles) çağır. Açıklama yapma.");
+              log("RE_PROMPT_RESPONSE", { candidates: response.candidates?.length, finishReason: response.candidates?.[0]?.finishReason });
+              iterations++;
+              continue;
             } else if (text) {
               send({ type: "text", content: text });
             }
@@ -154,6 +204,7 @@ export async function POST(req: NextRequest) {
           if (classifyTool(name) === "write") {
             // Queue the write — don't execute, don't break
             const summary = summarizeAction(name, args);
+            log("QUEUE_WRITE", { name, summary });
             queuedWrites.push({ name, args, summary });
 
             // Send synthetic "queued" result back to Gemini so it can continue reasoning
@@ -207,7 +258,9 @@ export async function POST(req: NextRequest) {
 
           // Read operation → execute immediately
           try {
+            log("EXEC_READ", { name, args: JSON.stringify(args).slice(0, 200) });
             const result = await executeTool(name, args);
+            log("READ_RESULT", { name, resultType: typeof result, resultSize: JSON.stringify(result).length });
 
             const updatedHistory: Content[] = [
               ...history,
@@ -230,6 +283,7 @@ export async function POST(req: NextRequest) {
             ];
 
             response = await chatWithToolResult(updatedHistory);
+            log("TOOL_RESULT_RESPONSE", { candidates: response.candidates?.length, finishReason: response.candidates?.[0]?.finishReason });
 
             history.push(
               { role: "user", parts: [{ text: lastMessage.content }] },
@@ -248,6 +302,7 @@ export async function POST(req: NextRequest) {
             );
             iterations++;
           } catch (error) {
+            log("TOOL_ERROR", { name, error: error instanceof Error ? error.message : "Unknown" });
             send({
               type: "error",
               content: `Tool error: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -276,6 +331,7 @@ export async function POST(req: NextRequest) {
           }
         }
       } catch (error) {
+        log("SERVER_ERROR", { error: error instanceof Error ? error.stack || error.message : "Unknown" });
         send({
           type: "error",
           content: `Server error: ${error instanceof Error ? error.message : "Unknown error"}`,

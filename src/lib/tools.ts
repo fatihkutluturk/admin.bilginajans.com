@@ -88,7 +88,12 @@ export async function executeTool(
     case "list_posts":
       return wp.listPosts(args);
     case "get_post":
-      return wp.getPost(args.id as number);
+      try {
+        return await wp.getPost(args.id as number);
+      } catch {
+        // Fallback: might be a page, not a post
+        return wp.getPage(args.id as number);
+      }
     case "create_post":
       return wp.createPost(args);
     case "update_post": {
@@ -100,7 +105,12 @@ export async function executeTool(
     case "list_pages":
       return wp.listPages(args);
     case "get_page":
-      return wp.getPage(args.id as number);
+      try {
+        return await wp.getPage(args.id as number);
+      } catch {
+        // Fallback: might be a post, not a page
+        return wp.getPost(args.id as number);
+      }
     case "create_page":
       return wp.createPage(args);
     case "update_page": {
@@ -129,26 +139,36 @@ export async function executeTool(
     // ---- Elementor JSON editing ----
     case "get_elementor_json": {
       const { extractJsonForAI } = await import("./elementor");
-      const contentType = args.content_type as string;
+      const contentType = (args.content_type as string) || "pages";
       let rawData: unknown;
       let title = "";
+      let resolvedType = contentType;
       if (contentType === "templates") {
         const data = await wp.getTemplateWithMeta(args.id as number);
         rawData = data.meta?._elementor_data;
         title = data.title?.rendered || "";
       } else {
-        const data = await wp.getPageWithMeta(args.id as number, contentType as "pages" | "posts");
-        rawData = data.meta?._elementor_data;
-        title = data.title?.rendered || "";
+        // Try the specified type first, fall back to the other if 404
+        try {
+          const data = await wp.getPageWithMeta(args.id as number, contentType as "pages" | "posts");
+          rawData = data.meta?._elementor_data;
+          title = data.title?.rendered || "";
+        } catch {
+          const fallback = contentType === "posts" ? "pages" : "posts";
+          const data = await wp.getPageWithMeta(args.id as number, fallback as "pages" | "posts");
+          rawData = data.meta?._elementor_data;
+          title = data.title?.rendered || "";
+          resolvedType = fallback;
+        }
       }
-      if (!rawData) return { title, elements: [], note: "No Elementor data found" };
+      if (!rawData) return { title, elements: [], note: "No Elementor data found", resolvedType };
       const elements = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
-      return { title, elements: extractJsonForAI(elements) };
+      return { title, content_type: resolvedType, elements: extractJsonForAI(elements) };
     }
 
     case "update_elementor_styles": {
       const { applyJsonPatches, renderContentFromElementor } = await import("./elementor");
-      const contentType = args.content_type as string;
+      let contentType = (args.content_type as string) || "pages";
       const patches = args.patches as Array<{ elementId: string; settings: Record<string, unknown> }>;
 
       let rawData: unknown;
@@ -156,8 +176,14 @@ export async function executeTool(
         const data = await wp.getTemplateWithMeta(args.id as number);
         rawData = data.meta?._elementor_data;
       } else {
-        const data = await wp.getPageWithMeta(args.id as number, contentType as "pages" | "posts");
-        rawData = data.meta?._elementor_data;
+        try {
+          const data = await wp.getPageWithMeta(args.id as number, contentType as "pages" | "posts");
+          rawData = data.meta?._elementor_data;
+        } catch {
+          contentType = contentType === "posts" ? "pages" : "posts";
+          const data = await wp.getPageWithMeta(args.id as number, contentType as "pages" | "posts");
+          rawData = data.meta?._elementor_data;
+        }
       }
       if (!rawData) throw new Error("No Elementor data found");
       const elements = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
@@ -202,20 +228,26 @@ export async function executeTool(
 
     case "clone_element": {
       const { cloneElementWithContent, insertElement, renderContentFromElementor } = await import("./elementor");
-      const contentType = args.content_type as string;
+      let contentType = (args.content_type as string) || "pages";
       const pageId = args.page_id as number;
       const sourceId = args.source_element_id as string;
       const textOverrides = args.text_overrides as Record<string, string> || {};
       const insertAfterId = args.insert_after_id as string;
 
-      // Read current data
+      // Read current data (with fallback)
       let rawData: unknown;
       if (contentType === "templates") {
         const data = await wp.getTemplateWithMeta(pageId);
         rawData = data.meta?._elementor_data;
       } else {
-        const data = await wp.getPageWithMeta(pageId, contentType as "pages" | "posts");
-        rawData = data.meta?._elementor_data;
+        try {
+          const data = await wp.getPageWithMeta(pageId, contentType as "pages" | "posts");
+          rawData = data.meta?._elementor_data;
+        } catch {
+          contentType = contentType === "posts" ? "pages" : "posts";
+          const data = await wp.getPageWithMeta(pageId, contentType as "pages" | "posts");
+          rawData = data.meta?._elementor_data;
+        }
       }
       if (!rawData) throw new Error("Elementor verisi bulunamadı");
       const elements = typeof rawData === "string" ? JSON.parse(rawData) : rawData;

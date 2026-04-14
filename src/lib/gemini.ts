@@ -338,6 +338,7 @@ export async function chatWithGemini(
     config: {
       systemInstruction: getChatSystemPrompt(),
       tools: [{ functionDeclarations: toolDeclarations }],
+      thinkingConfig: { thinkingBudget: 2048, includeThoughts: true },
     },
   });
 
@@ -353,6 +354,7 @@ export async function chatWithToolResult(
     config: {
       systemInstruction: getChatSystemPrompt(),
       tools: [{ functionDeclarations: toolDeclarations }],
+      thinkingConfig: { thinkingBudget: 2048, includeThoughts: true },
     },
   });
 
