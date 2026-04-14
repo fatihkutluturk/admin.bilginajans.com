@@ -13,7 +13,6 @@ export const tr = {
     audit: "Site Tarama",
     blogWriter: "Otomatik İçerik",
     keywordResearch: "Kelime Araştırma",
-    chat: "AI Asistan",
     seo: "Kontrol Paneli",
     settings: "Ayarlar",
     tools: "Araçlar",
@@ -137,17 +136,6 @@ export const tr = {
     hasDummyText: "Yer tutucu metin içeriyor",
     editTemplate: (id: number) => `${id} numaralı şablonu düzenle`,
     widgets: (n: number) => `${n} alan`,
-  },
-
-  // Chat
-  chat: {
-    title: "SEO Pilot Asistan",
-    subtitle: "Sitenizi doğal dille yönetin",
-    emptyTitle: "Siteniz hakkında bir soru sorun",
-    emptyHint: 'Deneyin: "Son yazılarımı listele" veya "Kahve hakkında taslak oluştur"',
-    pendingPlaceholder: "Yukarıdaki işlemi onaylayın veya reddedin...",
-    inputPlaceholder: "Mesajınızı yazın...",
-    confirmationRequired: "Onay Gerekli",
   },
 
   // Clone Dialog

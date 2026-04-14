@@ -6,7 +6,6 @@ import {
   PenLine,
   LayoutTemplate,
   Sparkles,
-  MessageSquare,
   Settings,
   Globe,
   Search,
@@ -17,7 +16,7 @@ import {
 } from "lucide-react";
 import { tr } from "@/lib/tr";
 
-export type View = "pages" | "posts" | "templates" | "blog-writer" | "seo" | "keyword-research" | "audit" | "chat" | "settings";
+export type View = "pages" | "posts" | "templates" | "blog-writer" | "seo" | "keyword-research" | "audit" | "settings";
 
 type NavItem = {
   id: View;
@@ -39,7 +38,6 @@ const contentItems: NavItem[] = [
 ];
 
 const toolItems: NavItem[] = [
-  { id: "chat", label: tr.nav.chat, icon: MessageSquare },
   { id: "settings", label: tr.nav.settings, icon: Settings },
 ];
 

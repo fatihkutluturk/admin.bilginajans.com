@@ -6,7 +6,6 @@ import { ContentList } from "@/components/content-list";
 import { ContentEditor } from "@/components/content-editor";
 import { TemplateList } from "@/components/template-list";
 import { TemplateEditor } from "@/components/template-editor";
-import { Chat } from "@/components/chat";
 import { BlogWriter } from "@/components/blog-writer";
 import { SettingsPage } from "@/components/settings-page";
 import { SeoDashboard } from "@/components/seo-dashboard";
@@ -16,7 +15,7 @@ import useSWR from "swr";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
-const VALID_VIEWS: View[] = ["seo", "keyword-research", "audit", "pages", "posts", "templates", "blog-writer", "chat", "settings"];
+const VALID_VIEWS: View[] = ["seo", "keyword-research", "audit", "pages", "posts", "templates", "blog-writer", "settings"];
 
 function parseHash(): { view: View; editId: number | null } {
   if (typeof window === "undefined") return { view: "seo", editId: null };
@@ -78,7 +77,6 @@ export default function Home() {
   }, []);
 
   const renderContent = () => {
-    if (view === "chat") return <Chat />;
     if (view === "settings") return <SettingsPage />;
     if (view === "blog-writer") return <BlogWriter />;
     if (view === "audit") return <ContentAudit onEditPage={(id) => { handleNavigate("pages"); setEditingId(id); }} />;

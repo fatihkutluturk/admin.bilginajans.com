@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { EditorAIChat } from "./editor-ai-chat";
 import { ElementorEditor } from "./elementor-editor";
 import { tr } from "@/lib/tr";
 
@@ -261,15 +260,7 @@ export function ContentEditor({
                 </div>
               </div>
 
-              {/* AI Chat panel (fields tab only) */}
-              <div className="w-80 shrink-0">
-                <EditorAIChat
-                  pageId={id}
-                  pageType={type}
-                  fields={{ title, content, excerpt }}
-                  onApplyFields={handleApplyFields}
-                />
-              </div>
+              {/* AI Chat panel removed — use Elementor MCP for editing */}
             </div>
           </>
         )}

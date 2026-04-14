@@ -569,6 +569,26 @@ function applyTextOverridesRecursive(
 }
 
 /**
+ * Clones a section, keeps only the first column, and applies text overrides.
+ * Use this to create a new single-card row from an existing multi-card row.
+ */
+export function cloneSectionAsSingleCard(
+  section: ElementorElement,
+  textOverrides: Record<string, string>
+): ElementorElement {
+  const cloned = cloneElement(section);
+  // Keep only the first column
+  if (cloned.elements && cloned.elements.length > 0) {
+    cloned.elements = [cloned.elements[0]];
+    // Update section structure to "10" (single column)
+    cloned.settings = { ...cloned.settings, structure: "10" };
+  }
+  // Apply text overrides to the remaining column's widgets
+  applyTextOverridesRecursive(cloned, textOverrides, {});
+  return cloned;
+}
+
+/**
  * Inserts a new element into the Elementor tree at a specified position.
  * parentId: ID of the parent element (section/container) to insert into.
  *   If null, inserts at the top level.

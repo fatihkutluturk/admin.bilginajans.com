@@ -44,3 +44,12 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 undo/
+
+# MCP config (contains credentials)
+.mcp.json
+
+# MCP proxy
+bin/
+
+# Claude Code local settings
+.claude/settings.local.json

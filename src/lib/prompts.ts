@@ -93,22 +93,6 @@ export function getPromptConfig(): PromptConfig {
 
 // ---- Assembled prompts with locked structural parts ----
 
-const LOCKED_CHAT_SUFFIX = `
-IMPORTANT - Resolving names to IDs:
-- When a user refers to a post or page by name/title/slug instead of ID, you MUST first use the search parameter of list_posts or list_pages to find it. NEVER ask the user for an ID — look it up yourself.
-- For example, if user says "show me the usb-bellek-baski page", call list_pages with search="usb-bellek-baski" to find the ID, then call get_page with that ID.
-- Similarly for categories and tags — use the search parameter to find them by name.
-- Always chain these lookups automatically without asking the user.`;
-
-export function getChatSystemPrompt(): string {
-  const c = getPromptConfig().chat;
-  return `${c.role}
-
-Guidelines:
-${c.guidelines}
-${LOCKED_CHAT_SUFFIX}`;
-}
-
 const LOCKED_ELEMENTOR_RULES = `
 - For "Heading" fields: write concise, compelling headings (plain text, no HTML)
 - For "Text" / "Paragraph" fields: write well-structured HTML content using <p>, <strong>, <em>, <ul>/<li> tags only. Write 2-4 paragraphs of substantial content.

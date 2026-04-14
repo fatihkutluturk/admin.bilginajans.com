@@ -4,29 +4,6 @@ export type SiteConfig = {
   appPassword: string;
 };
 
-export type Message = {
-  role: "user" | "assistant";
-  content: string;
-};
-
-export type QueuedWrite = {
-  functionCall: {
-    name: string;
-    args: Record<string, unknown>;
-  };
-  summary: string;
-};
-
-export type PendingAction = {
-  writes: QueuedWrite[];
-  combinedSummary: string;
-};
-
-export type ChatRequest = {
-  messages: Message[];
-  pendingAction?: PendingAction & { approved: boolean };
-};
-
 // Elementor types
 
 export type ElementorElement = {
@@ -105,9 +82,3 @@ export type PageAudit = {
   hasElementor: boolean;
   issues: AuditIssue[];
 };
-
-export type StreamChunk =
-  | { type: "text"; content: string }
-  | { type: "confirmation"; pendingAction: PendingAction }
-  | { type: "result"; content: string }
-  | { type: "error"; content: string };
