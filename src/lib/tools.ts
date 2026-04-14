@@ -280,8 +280,15 @@ export async function executeTool(
 
       // Find where to insert: as sibling after insert_after_id
       const parentId = findParentId(elements, insertAfterId);
+      console.log(`[CLONE] sourceId=${sourceId} found=${!!source} insertAfterId=${insertAfterId} parentId=${parentId}`);
+      console.log(`[CLONE] elements count before: ${elements.length}`);
       saveSnapshot(pageId, contentType, typeof rawData === "string" ? rawData as string : JSON.stringify(rawData));
       const updated = insertElement(elements, cloned, parentId, "after", insertAfterId);
+      console.log(`[CLONE] elements count after: ${updated.length}`);
+      // Deep check: did the insertion actually happen?
+      const beforeStr = JSON.stringify(elements).length;
+      const afterStr = JSON.stringify(updated).length;
+      console.log(`[CLONE] JSON size before: ${beforeStr} after: ${afterStr} diff: ${afterStr - beforeStr}`);
 
       // Save
       const content = renderContentFromElementor(updated);
@@ -318,14 +325,15 @@ function findElementById(elements: Array<Record<string, unknown>>, id: string): 
 }
 
 // Helper: find the parent ID of an element
-function findParentId(elements: Array<Record<string, unknown>>, childId: string, currentParent: string | null = null): string | null {
+function findParentId(elements: Array<Record<string, unknown>>, childId: string): string | null {
   for (const el of elements) {
     const children = el.elements as Array<Record<string, unknown>> | undefined;
-    if (children?.some(c => c.id === childId)) return el.id as string;
-    if (children?.length) {
-      const found = findParentId(children, childId, el.id as string);
-      if (found) return found;
-    }
+    if (!children?.length) continue;
+    // Direct parent check
+    if (children.some(c => c.id === childId)) return el.id as string;
+    // Recurse into children
+    const found = findParentId(children, childId);
+    if (found) return found;
   }
-  return currentParent;
+  return null;
 }
