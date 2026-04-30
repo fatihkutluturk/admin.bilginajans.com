@@ -9,11 +9,13 @@ import {
   TrendingUp,
   Zap,
   ShieldCheck,
+  Inbox,
   type LucideIcon,
 } from "lucide-react";
 import { tr } from "@/lib/tr";
+import { usePilotEvents, pilotEventCounts, usePilotProgress, runPilotBatch, abortPilotBatch } from "@/lib/pilot";
 
-export type View = "pages" | "posts" | "templates" | "blog-writer" | "seo" | "keyword-research" | "audit" | "settings";
+export type View = "pages" | "posts" | "templates" | "blog-writer" | "seo" | "keyword-research" | "audit" | "review-queue" | "settings";
 
 type NavItem = {
   id: View;
@@ -28,6 +30,7 @@ const seoItems: NavItem[] = [
 
 const contentItems: NavItem[] = [
   { id: "audit", label: tr.nav.audit, icon: ShieldCheck },
+  { id: "review-queue", label: tr.nav.reviewQueue, icon: Inbox },
   { id: "blog-writer", label: tr.nav.blogWriter, icon: Sparkles },
 ];
 
@@ -44,6 +47,8 @@ export function Sidebar({
   onNavigate: (view: View) => void;
   siteName?: string;
 }) {
+  const pilotEvents = usePilotEvents();
+  const pilotCounts = pilotEventCounts(pilotEvents);
   return (
     <aside className="flex h-full w-60 shrink-0 flex-col overflow-hidden border-r border-gray-200/80 bg-gray-50/80 dark:border-gray-800 dark:bg-gray-950">
       {/* Brand */}
@@ -96,6 +101,7 @@ export function Sidebar({
                 item={item}
                 isActive={activeView === item.id}
                 onClick={() => onNavigate(item.id)}
+                badge={item.id === "review-queue" ? pilotCounts.pending : undefined}
               />
             ))}
           </div>
@@ -119,9 +125,96 @@ export function Sidebar({
         </div>
       </nav>
 
+      {/* Pilot status */}
+      <PilotStatus
+        pendingCount={pilotCounts.pending}
+        appliedCount={pilotCounts.applied}
+        onOpenQueue={() => onNavigate("review-queue")}
+      />
+
       {/* Automation status */}
       <AutomationStatus />
     </aside>
+  );
+}
+
+function PilotStatus({
+  pendingCount,
+  appliedCount,
+  onOpenQueue,
+}: {
+  pendingCount: number;
+  appliedCount: number;
+  onOpenQueue: () => void;
+}) {
+  const progress = usePilotProgress();
+  const isRunning = progress.status === "scanning" || progress.status === "fixing";
+
+  return (
+    <div className="border-t border-gray-200/80 px-4 py-3 dark:border-gray-800">
+      <div className="flex items-center gap-2">
+        <span className="relative flex h-2 w-2">
+          <span className={`absolute inline-flex h-full w-full rounded-full opacity-60 ${isRunning ? "animate-ping bg-amber-400" : "bg-indigo-400"}`} />
+          <span className={`relative inline-flex h-2 w-2 rounded-full ${isRunning ? "bg-amber-500" : "bg-indigo-500"}`} />
+        </span>
+        <span className={`text-xs font-semibold ${isRunning ? "text-amber-600 dark:text-amber-400" : "text-indigo-600 dark:text-indigo-400"}`}>
+          {tr.pilot.statusCardTitle} · {isRunning ? tr.pilot.running : tr.pilot.statusActive}
+        </span>
+      </div>
+
+      {isRunning ? (
+        <div className="mt-2 space-y-1.5">
+          <p className="text-xs text-gray-600 dark:text-gray-400">
+            {progress.status === "scanning"
+              ? tr.pilot.scanning
+              : tr.pilot.fixingProgress
+                  .replace("{done}", String(progress.done))
+                  .replace("{total}", String(progress.total))}
+          </p>
+          {progress.total > 0 && (
+            <div className="h-1 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-800">
+              <div
+                className="h-full bg-amber-500 transition-all"
+                style={{ width: `${(progress.done / progress.total) * 100}%` }}
+              />
+            </div>
+          )}
+          <button
+            onClick={() => abortPilotBatch()}
+            className="text-[11px] text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          >
+            {tr.pilot.abort}
+          </button>
+        </div>
+      ) : pendingCount > 0 ? (
+        <div className="mt-2 space-y-1.5">
+          <button
+            onClick={onOpenQueue}
+            className="w-full rounded-lg bg-amber-50 px-2.5 py-1.5 text-left text-xs font-medium text-amber-700 hover:bg-amber-100 dark:bg-amber-900/20 dark:text-amber-400 dark:hover:bg-amber-900/30"
+          >
+            {pendingCount} {tr.pilot.pendingCount} →
+          </button>
+          <button
+            onClick={() => runPilotBatch().catch(() => {})}
+            className="w-full text-left text-[11px] text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          >
+            {tr.pilot.runNow}
+          </button>
+        </div>
+      ) : (
+        <div className="mt-2 space-y-1.5">
+          <p className="text-xs text-gray-400 dark:text-gray-500">
+            {appliedCount > 0 ? `${appliedCount} ${tr.pilot.appliedCount}` : tr.pilot.heroNoPending}
+          </p>
+          <button
+            onClick={() => runPilotBatch().catch(() => {})}
+            className="w-full rounded-lg bg-indigo-50 px-2.5 py-1.5 text-left text-xs font-medium text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:text-indigo-400 dark:hover:bg-indigo-900/30"
+          >
+            {tr.pilot.runNow}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -129,10 +222,12 @@ function NavButton({
   item,
   isActive,
   onClick,
+  badge,
 }: {
   item: NavItem;
   isActive: boolean;
   onClick: () => void;
+  badge?: number;
 }) {
   const Icon = item.icon;
 
@@ -153,7 +248,12 @@ function NavButton({
         }`}
         strokeWidth={isActive ? 2 : 1.75}
       />
-      {item.label}
+      <span className="flex-1">{item.label}</span>
+      {badge !== undefined && badge > 0 && (
+        <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white tabular-nums">
+          {badge}
+        </span>
+      )}
     </button>
   );
 }

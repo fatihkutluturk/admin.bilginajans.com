@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { PageAudit } from "@/lib/types";
 import { tr } from "@/lib/tr";
+import { addPilotEvent } from "@/lib/pilot";
 
 type AuditData = {
   pages: PageAudit[];
@@ -22,6 +23,7 @@ export function ContentAudit({ onEditPage }: { onEditPage: (id: number) => void 
   const [filter, setFilter] = useState<Filter>("all");
   const [fixingId, setFixingId] = useState<number | null>(null);
   const [fixError, setFixError] = useState<{ id: number; message: string } | null>(null);
+  const [queuedId, setQueuedId] = useState<{ id: number; count: number } | null>(null);
 
   const runAudit = useCallback(async (deep = false) => {
     setLoading(true);
@@ -46,32 +48,34 @@ export function ContentAudit({ onEditPage }: { onEditPage: (id: number) => void 
     runAudit(false); // fast scan on load
   }, [runAudit]);
 
-  const autoFix = useCallback(async (pageId: number) => {
+  const queueFix = useCallback(async (pageId: number) => {
     setFixingId(pageId);
     setFixError(null);
     try {
       const res = await fetch("/api/audit/fix", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pageId }),
+        body: JSON.stringify({ pageId, mode: "preview" }),
       });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || `HTTP ${res.status}`);
-      if (result.audit) {
-        setData((prev) => {
-          if (!prev) return prev;
-          const newPages = prev.pages.map((p) => (p.id === pageId ? result.audit : p));
-          const siteScore = newPages.length > 0
-            ? Math.round(newPages.reduce((s, p) => s + p.score, 0) / newPages.length)
-            : 100;
-          return {
-            pages: newPages,
-            siteScore,
-            totalPages: newPages.length,
-            pagesWithIssues: newPages.filter((p) => p.issues.length > 0).length,
-          };
-        });
+
+      if (!result.totalChanges || result.totalChanges === 0) {
+        setQueuedId({ id: pageId, count: 0 });
+        return;
       }
+
+      addPilotEvent({
+        type: "audit_fix",
+        payload: {
+          pageId: result.pageId,
+          pageTitle: result.pageTitle,
+          pageSlug: result.pageSlug,
+          textChanges: result.textChanges || [],
+          altChanges: result.altChanges || [],
+        },
+      });
+      setQueuedId({ id: pageId, count: result.totalChanges });
     } catch (err) {
       setFixError({ id: pageId, message: err instanceof Error ? err.message : "Fix failed" });
     } finally {
@@ -273,7 +277,7 @@ export function ContentAudit({ onEditPage }: { onEditPage: (id: number) => void 
                 <div className="flex gap-2">
                   {page.issues.some((i) => FIXABLE_CODES.has(i.code)) && (
                     <button
-                      onClick={() => autoFix(page.id)}
+                      onClick={() => queueFix(page.id)}
                       disabled={fixingId === page.id}
                       className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
                     >
@@ -287,6 +291,13 @@ export function ContentAudit({ onEditPage }: { onEditPage: (id: number) => void 
                     {tr.common.edit}
                   </button>
                 </div>
+                {queuedId?.id === page.id && (
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                    {queuedId.count > 0
+                      ? `${tr.audit.autoFixQueued} (${queuedId.count})`
+                      : tr.audit.autoFixNoChanges}
+                  </p>
+                )}
                 {fixError?.id === page.id && (
                   <p className="text-xs text-red-600 dark:text-red-400">
                     {tr.audit.autoFixFailed}: {fixError.message}

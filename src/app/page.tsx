@@ -11,11 +11,13 @@ import { SettingsPage } from "@/components/settings-page";
 import { SeoDashboard } from "@/components/seo-dashboard";
 import { KeywordResearch } from "@/components/keyword-research";
 import { ContentAudit } from "@/components/content-audit";
+import { ReviewQueue } from "@/components/review-queue";
+import { usePilotAutoRun } from "@/lib/pilot";
 import useSWR from "swr";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
-const VALID_VIEWS: View[] = ["seo", "keyword-research", "audit", "pages", "posts", "templates", "blog-writer", "settings"];
+const VALID_VIEWS: View[] = ["seo", "keyword-research", "audit", "review-queue", "pages", "posts", "templates", "blog-writer", "settings"];
 
 function parseHash(): { view: View; editId: number | null } {
   if (typeof window === "undefined") return { view: "seo", editId: null };
@@ -37,6 +39,9 @@ export default function Home() {
   });
   const siteName = siteData?.name;
   const wpUrl = siteData?.wpUrl || "";
+
+  // Auto-run Pilot batch on mount if last run > 12h ago
+  usePilotAutoRun(mounted);
 
   // Sync from hash on mount and popstate
   useEffect(() => {
@@ -79,9 +84,10 @@ export default function Home() {
   const renderContent = () => {
     if (view === "settings") return <SettingsPage />;
     if (view === "blog-writer") return <BlogWriter />;
+    if (view === "review-queue") return <ReviewQueue />;
     if (view === "audit") return <ContentAudit onEditPage={(id) => { handleNavigate("pages"); setEditingId(id); }} />;
     if (view === "keyword-research") return <KeywordResearch onNavigate={handleNavigate} />;
-    if (view === "seo") return <SeoDashboard onNavigateSettings={() => handleNavigate("settings")} />;
+    if (view === "seo") return <SeoDashboard onNavigateSettings={() => handleNavigate("settings")} onOpenQueue={() => handleNavigate("review-queue")} />;
 
     if (view === "templates") {
       if (editingId) {

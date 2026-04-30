@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, Fragment } from "react";
 import { usePersistedState } from "@/lib/use-persisted-state";
 import { tr } from "@/lib/tr";
+import { PilotHero } from "@/components/pilot-hero";
 import {
   Search, RefreshCw, ArrowUp, ArrowDown, Minus, ChevronLeft, ChevronRight, Monitor, Smartphone,
   Sparkles, Globe, TrendingUp, TrendingDown, Trophy, Target, Settings, Plus, Trash2, X,
@@ -36,7 +37,7 @@ type PageSpeedResult = {
 type Tab = "overview" | "rankings" | "competitors" | "performance" | "insights";
 type RankSubView = "list" | "detail" | "add-keyword";
 
-export function SeoDashboard({ onNavigateSettings }: { onNavigateSettings: () => void }) {
+export function SeoDashboard({ onNavigateSettings, onOpenQueue }: { onNavigateSettings: () => void; onOpenQueue: () => void }) {
   const [domains, setDomains] = useState<Domain[]>([]);
   const [selectedDomain, setSelectedDomain] = usePersistedState<string>("seo:domain", "");
   const [tab, setTab] = usePersistedState<Tab>("seo:tab", "overview");
@@ -223,6 +224,9 @@ export function SeoDashboard({ onNavigateSettings }: { onNavigateSettings: () =>
           ))}
         </div>
       </div>
+
+      {/* Pilot hero */}
+      <PilotHero onOpenQueue={onOpenQueue} />
 
       {/* Feedback */}
       {error && <div className="mx-6 mt-3 flex items-center justify-between rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">{error}<button onClick={() => setError("")}><X className="h-4 w-4" /></button></div>}
