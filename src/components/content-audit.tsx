@@ -13,11 +13,15 @@ type AuditData = {
 
 type Filter = "all" | "errors" | "warnings" | "good";
 
+const FIXABLE_CODES = new Set(["placeholder", "empty_widget", "missing_alt"]);
+
 export function ContentAudit({ onEditPage }: { onEditPage: (id: number) => void }) {
   const [data, setData] = useState<AuditData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [fixingId, setFixingId] = useState<number | null>(null);
+  const [fixError, setFixError] = useState<{ id: number; message: string } | null>(null);
 
   const runAudit = useCallback(async (deep = false) => {
     setLoading(true);
@@ -41,6 +45,39 @@ export function ContentAudit({ onEditPage }: { onEditPage: (id: number) => void 
   useEffect(() => {
     runAudit(false); // fast scan on load
   }, [runAudit]);
+
+  const autoFix = useCallback(async (pageId: number) => {
+    setFixingId(pageId);
+    setFixError(null);
+    try {
+      const res = await fetch("/api/audit/fix", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pageId }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || `HTTP ${res.status}`);
+      if (result.audit) {
+        setData((prev) => {
+          if (!prev) return prev;
+          const newPages = prev.pages.map((p) => (p.id === pageId ? result.audit : p));
+          const siteScore = newPages.length > 0
+            ? Math.round(newPages.reduce((s, p) => s + p.score, 0) / newPages.length)
+            : 100;
+          return {
+            pages: newPages,
+            siteScore,
+            totalPages: newPages.length,
+            pagesWithIssues: newPages.filter((p) => p.issues.length > 0).length,
+          };
+        });
+      }
+    } catch (err) {
+      setFixError({ id: pageId, message: err instanceof Error ? err.message : "Fix failed" });
+    } finally {
+      setFixingId(null);
+    }
+  }, []);
 
   const scoreColor = (score: number) => {
     if (score >= 80) return "text-green-600 dark:text-green-400";
@@ -231,13 +268,31 @@ export function ContentAudit({ onEditPage }: { onEditPage: (id: number) => void 
                 )}
               </div>
 
-              {/* Action */}
-              <button
-                onClick={() => onEditPage(page.id)}
-                className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
-              >
-                {tr.common.edit}
-              </button>
+              {/* Actions */}
+              <div className="flex shrink-0 flex-col items-end gap-1.5">
+                <div className="flex gap-2">
+                  {page.issues.some((i) => FIXABLE_CODES.has(i.code)) && (
+                    <button
+                      onClick={() => autoFix(page.id)}
+                      disabled={fixingId === page.id}
+                      className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                      {fixingId === page.id ? tr.audit.autoFixing : tr.audit.autoFix}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => onEditPage(page.id)}
+                    className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
+                  >
+                    {tr.common.edit}
+                  </button>
+                </div>
+                {fixError?.id === page.id && (
+                  <p className="text-xs text-red-600 dark:text-red-400">
+                    {tr.audit.autoFixFailed}: {fixError.message}
+                  </p>
+                )}
+              </div>
             </div>
           ))}
 

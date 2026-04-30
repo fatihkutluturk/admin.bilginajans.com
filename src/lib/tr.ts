@@ -223,6 +223,10 @@ export const tr = {
     filterGood: "Sorunsuz",
     wordCount: "kelime",
     score: "Puan",
+    autoFix: "Otomatik Düzelt",
+    autoFixing: "Düzeltiliyor...",
+    autoFixSuccess: "Düzeltildi",
+    autoFixFailed: "Düzeltme başarısız",
     issues: {
       placeholder: "Yer tutucu metin (Lorem ipsum) tespit edildi",
       empty_widget: "Boş metin alanı — sitede Lorem ipsum görünüyor",

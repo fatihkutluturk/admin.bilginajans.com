@@ -2,9 +2,6 @@
 
 import { useState, useEffect } from "react";
 import {
-  FileText,
-  PenLine,
-  LayoutTemplate,
   Sparkles,
   Settings,
   Globe,
@@ -31,9 +28,6 @@ const seoItems: NavItem[] = [
 
 const contentItems: NavItem[] = [
   { id: "audit", label: tr.nav.audit, icon: ShieldCheck },
-  { id: "pages", label: tr.nav.pages, icon: FileText },
-  { id: "posts", label: tr.nav.posts, icon: PenLine },
-  { id: "templates", label: tr.nav.templates, icon: LayoutTemplate },
   { id: "blog-writer", label: tr.nav.blogWriter, icon: Sparkles },
 ];
 
